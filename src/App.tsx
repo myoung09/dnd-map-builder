@@ -19,6 +19,7 @@ import {
   Menu as MenuIcon,
   Save as SaveIcon,
   Folder as FolderIcon,
+  FolderOpen as FolderOpenIcon,
   Add as AddIcon,
   Image as ImageIcon,
   AutoAwesome as AutoAwesomeIcon,
@@ -40,6 +41,8 @@ import AssetBrowser from './components/AssetBrowser';
 import GridSettings from './components/GridSettings';
 import MeasurementTools from './components/MeasurementTools';
 import KeyboardShortcuts from './components/KeyboardShortcuts';
+import WorkspaceManager from './components/WorkspaceManager/WorkspaceManager';
+import WorkspaceNavigation from './components/WorkspaceNavigation/WorkspaceNavigation';
 import { 
   DnDMap, 
   ViewportState, 
@@ -47,11 +50,13 @@ import {
   ToolType, 
   TerrainType 
 } from './types/map';
+import { Workspace } from './types/workspace';
 import { createNewMap } from './utils/mapUtils';
 import { DEFAULT_MAP_DIMENSIONS } from './utils/constants';
 import { useAutoSave } from './hooks/useAutoSave';
 import { fileService } from './services/fileService';
 import { mapEditingService } from './services/mapEditingService';
+import workspaceService from './services/workspaceService';
 
 // Create Material-UI theme
 const theme = createTheme({
@@ -91,6 +96,12 @@ function App() {
     selectedLayer: currentMap.layers[1].id // Terrain layer
   });
 
+  // Workspace state
+  const [currentWorkspace, setCurrentWorkspace] = useState<Workspace | null>(null);
+  const [workspaceManagerOpen, setWorkspaceManagerOpen] = useState(false);
+  const [workspaceNavigationOpen, setWorkspaceNavigationOpen] = useState(false);
+  const [selectedMapId, setSelectedMapId] = useState<string | null>(null);
+  
   const [selectedObjects, setSelectedObjects] = useState<string[]>([]);
   const [fileManagerOpen, setFileManagerOpen] = useState(false);
   const [imageExportOpen, setImageExportOpen] = useState(false);
@@ -235,6 +246,61 @@ function App() {
     setIsDirty(true);
     showNotification('Grid settings updated', 'success');
   }, [showNotification]);
+
+  // Workspace handlers
+  const handleWorkspaceSelected = useCallback((workspace: Workspace) => {
+    setCurrentWorkspace(workspace);
+    setSelectedMapId(null);
+    
+    // If workspace has maps, load the first one
+    if (workspace.maps.length > 0) {
+      const firstMap = workspace.maps[0];
+      setCurrentMap(firstMap.mapData);
+      setSelectedMapId(firstMap.id);
+      setIsDirty(false);
+    }
+    
+    showNotification(`Loaded workspace: ${workspace.metadata.name}`, 'success');
+  }, [showNotification]);
+
+  const handleWorkspaceMapSelected = useCallback((mapId: string) => {
+    if (!currentWorkspace) return;
+    
+    const workspaceMap = currentWorkspace.maps.find(m => m.id === mapId);
+    if (workspaceMap) {
+      setCurrentMap(workspaceMap.mapData);
+      setSelectedMapId(mapId);
+      setIsDirty(false);
+      showNotification(`Opened map: ${workspaceMap.name}`, 'success');
+    }
+  }, [currentWorkspace, showNotification]);
+
+  const handleWorkspaceChanged = useCallback((workspace: Workspace) => {
+    setCurrentWorkspace(workspace);
+    
+    // Update the current map in workspace if it's been modified
+    if (selectedMapId && isDirty) {
+      workspaceService.updateMap(selectedMapId, currentMap);
+      setIsDirty(false);
+    }
+  }, [selectedMapId, isDirty, currentMap]);
+
+  const handleAddMapToWorkspace = useCallback(() => {
+    if (!currentWorkspace) {
+      // Show workspace manager if no workspace is loaded
+      setWorkspaceManagerOpen(true);
+      return;
+    }
+    
+    // Add current map to workspace
+    workspaceService.addMap(currentMap, 'other');
+    const updatedWorkspace = workspaceService.getCurrentWorkspace();
+    if (updatedWorkspace) {
+      setCurrentWorkspace(updatedWorkspace);
+      setSelectedMapId(currentMap.metadata.id);
+      showNotification(`Added map to workspace: ${currentMap.metadata.name}`, 'success');
+    }
+  }, [currentWorkspace, currentMap, showNotification]);
 
   // Measurement tool handlers
   const handleMeasurementToggle = useCallback(() => {
@@ -468,9 +534,16 @@ function App() {
             <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
               D&D Map Builder
             </Typography>
-            <Typography variant="body2" color="inherit" sx={{ mr: 2 }}>
-              {currentMap.metadata.name} {isDirty && '(unsaved)'}
-            </Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', mr: 2 }}>
+              {currentWorkspace && (
+                <Typography variant="caption" color="inherit" sx={{ opacity: 0.8 }}>
+                  {currentWorkspace.metadata.name}
+                </Typography>
+              )}
+              <Typography variant="body2" color="inherit">
+                {currentMap.metadata.name} {isDirty && '(unsaved)'}
+              </Typography>
+            </Box>
             <Button
               color="inherit"
               startIcon={<AutoAwesomeIcon />}
@@ -536,6 +609,25 @@ function App() {
           open={Boolean(menuAnchor)}
           onClose={handleMenuClose}
         >
+          <MenuItem onClick={() => { setWorkspaceManagerOpen(true); handleMenuClose(); }}>
+            <FolderIcon sx={{ mr: 1 }} />
+            Workspace Manager...
+          </MenuItem>
+          <MenuItem 
+            onClick={() => { setWorkspaceNavigationOpen(true); handleMenuClose(); }}
+            disabled={!currentWorkspace}
+          >
+            <FolderOpenIcon sx={{ mr: 1 }} />
+            Browse Maps
+          </MenuItem>
+          <MenuItem 
+            onClick={() => { handleAddMapToWorkspace(); handleMenuClose(); }}
+            disabled={!currentMap}
+          >
+            <AddIcon sx={{ mr: 1 }} />
+            Add to Workspace
+          </MenuItem>
+          <Divider />
           <MenuItem onClick={() => { handleNewMap(); handleMenuClose(); }}>
             <AddIcon sx={{ mr: 1 }} />
             New Map
@@ -788,6 +880,24 @@ function App() {
         <KeyboardShortcuts
           open={keyboardShortcutsOpen}
           onClose={() => setKeyboardShortcutsOpen(false)}
+        />
+
+        {/* Workspace Manager */}
+        <WorkspaceManager
+          open={workspaceManagerOpen}
+          onClose={() => setWorkspaceManagerOpen(false)}
+          onWorkspaceSelected={handleWorkspaceSelected}
+          currentWorkspace={currentWorkspace}
+        />
+
+        {/* Workspace Navigation */}
+        <WorkspaceNavigation
+          workspace={currentWorkspace}
+          selectedMapId={selectedMapId}
+          onMapSelected={handleWorkspaceMapSelected}
+          onWorkspaceChanged={handleWorkspaceChanged}
+          open={workspaceNavigationOpen}
+          onClose={() => setWorkspaceNavigationOpen(false)}
         />
 
         {/* Notification Snackbar */}
