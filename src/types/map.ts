@@ -181,6 +181,7 @@ export interface ToolState {
   selectedObjectType: ObjectType;
   selectedColor: Color;
   selectedLayer: string; // Layer ID
+  selectedAsset?: AssetReference; // Currently selected asset for placement
 }
 
 // Viewport state for canvas rendering

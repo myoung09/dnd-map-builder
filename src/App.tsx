@@ -24,7 +24,11 @@ import {
   AutoAwesome as AutoAwesomeIcon,
   Undo as UndoIcon,
   Redo as RedoIcon,
-  Layers as LayersIcon
+  Layers as LayersIcon,
+  Collections as AssetsIcon,
+  GridOn as GridIcon,
+  Straighten as RulerIcon,
+  Help as HelpIcon
 } from '@mui/icons-material';
 import SimpleMapCanvas from './components/MapCanvas/SimpleMapCanvas';
 import MapToolbar from './components/Toolbar/Toolbar';
@@ -32,6 +36,10 @@ import FileManager from './components/FileManager/FileManager';
 import ImageExportDialog from './components/ImageExport/ImageExportDialog';
 import { AIGenerationDialog } from './components/AIGeneration';
 import { LayerPanel } from './components/LayerPanel';
+import AssetBrowser from './components/AssetBrowser';
+import GridSettings from './components/GridSettings';
+import MeasurementTools from './components/MeasurementTools';
+import KeyboardShortcuts from './components/KeyboardShortcuts';
 import { 
   DnDMap, 
   ViewportState, 
@@ -88,6 +96,12 @@ function App() {
   const [imageExportOpen, setImageExportOpen] = useState(false);
   const [aiGenerationOpen, setAiGenerationOpen] = useState(false);
   const [layerPanelOpen, setLayerPanelOpen] = useState(false);
+  const [assetBrowserOpen, setAssetBrowserOpen] = useState(false);
+  const [gridSettingsOpen, setGridSettingsOpen] = useState(false);
+  const [measurementToolActive, setMeasurementToolActive] = useState(false);
+  const [measurementPoints, setMeasurementPoints] = useState<any[]>([]);
+  const [measurementLines, setMeasurementLines] = useState<any[]>([]);
+  const [keyboardShortcutsOpen, setKeyboardShortcutsOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [notification, setNotification] = useState<{
@@ -200,6 +214,68 @@ function App() {
     setSelectedObjects(objectIds);
   }, []);
 
+  // Asset selection handler
+  const handleAssetSelect = useCallback((asset: any) => {
+    // Switch to object placement tool when an asset is selected
+    setToolState(prev => ({
+      ...prev,
+      activeTool: ToolType.OBJECT_PLACE,
+      selectedAsset: asset
+    }));
+    setAssetBrowserOpen(false);
+    showNotification(`Selected asset: ${asset.name}`, 'info');
+  }, [showNotification]);
+
+  // Grid configuration handler
+  const handleGridConfigChange = useCallback((gridConfig: any) => {
+    setCurrentMap(prev => ({
+      ...prev,
+      gridConfig
+    }));
+    setIsDirty(true);
+    showNotification('Grid settings updated', 'success');
+  }, [showNotification]);
+
+  // Measurement tool handlers
+  const handleMeasurementToggle = useCallback(() => {
+    setMeasurementToolActive(prev => !prev);
+  }, []);
+
+  const handleAddMeasurementPoint = useCallback((position: any) => {
+    const newPoint = {
+      id: `point-${Date.now()}`,
+      position
+    };
+    setMeasurementPoints(prev => [...prev, newPoint]);
+    
+    // Calculate lines if we have at least 2 points
+    setMeasurementLines(prev => {
+      if (measurementPoints.length > 0) {
+        const lastPoint = measurementPoints[measurementPoints.length - 1];
+        const distance = Math.sqrt(
+          Math.pow(position.x - lastPoint.position.x, 2) + 
+          Math.pow(position.y - lastPoint.position.y, 2)
+        );
+        const gridDistance = distance / currentMap.gridConfig.cellSize;
+        
+        const newLine = {
+          id: `line-${Date.now()}`,
+          startPoint: lastPoint,
+          endPoint: newPoint,
+          distance,
+          gridDistance
+        };
+        return [...prev, newLine];
+      }
+      return prev;
+    });
+  }, [measurementPoints, currentMap.gridConfig.cellSize]);
+
+  const handleClearMeasurements = useCallback(() => {
+    setMeasurementPoints([]);
+    setMeasurementLines([]);
+  }, []);
+
   // Undo/Redo handlers
   const handleUndo = useCallback(() => {
     const result = mapEditingService.undo(currentMap);
@@ -219,9 +295,18 @@ function App() {
     }
   }, [currentMap, showNotification]);
 
-  // Keyboard shortcuts
+  // Enhanced keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // Prevent shortcuts when typing in inputs
+      const target = event.target as HTMLElement;
+      const isInputField = target.tagName === 'INPUT' || 
+                          target.tagName === 'TEXTAREA' || 
+                          target.contentEditable === 'true';
+      
+      if (isInputField) return;
+
+      // Ctrl/Cmd + Key combinations
       if (event.ctrlKey || event.metaKey) {
         switch (event.key) {
           case 'z':
@@ -241,10 +326,111 @@ function App() {
             event.preventDefault();
             fileService.saveMapToStorage(currentMap);
             showNotification('Map saved', 'success');
+            setIsDirty(false);
             break;
           case 'n':
             event.preventDefault();
             handleNewMap();
+            break;
+          case 'o':
+            event.preventDefault();
+            setFileManagerOpen(true);
+            break;
+          case 'e':
+            event.preventDefault();
+            setImageExportOpen(true);
+            break;
+          case 'g':
+            event.preventDefault();
+            setGridSettingsOpen(true);
+            break;
+          case 'l':
+            event.preventDefault();
+            setLayerPanelOpen(true);
+            break;
+          case 'a':
+            event.preventDefault();
+            setAssetBrowserOpen(true);
+            break;
+          case 'i':
+            event.preventDefault();
+            setAiGenerationOpen(true);
+            break;
+          case '?':
+          case '/':
+            event.preventDefault();
+            setKeyboardShortcutsOpen(true);
+            break;
+        }
+      }
+      
+      // Single key shortcuts (no modifier)
+      else {
+        switch (event.key) {
+          case 'b':
+            event.preventDefault();
+            handleToolChange(ToolType.BRUSH);
+            break;
+          case 'e':
+            event.preventDefault();
+            handleToolChange(ToolType.ERASER);
+            break;
+          case 's':
+            event.preventDefault();
+            handleToolChange(ToolType.SELECT);
+            break;
+          case 'r':
+            event.preventDefault();
+            handleToolChange(ToolType.RECTANGLE);
+            break;
+          case 'c':
+            event.preventDefault();
+            handleToolChange(ToolType.CIRCLE);
+            break;
+          case 'o':
+            event.preventDefault();
+            handleToolChange(ToolType.OBJECT_PLACE);
+            break;
+          case 'g':
+            event.preventDefault();
+            setCurrentMap(prev => ({
+              ...prev,
+              gridConfig: {
+                ...prev.gridConfig,
+                showGrid: !prev.gridConfig.showGrid
+              }
+            }));
+            showNotification(`Grid ${currentMap.gridConfig.showGrid ? 'hidden' : 'shown'}`, 'info');
+            break;
+          case 'm':
+            event.preventDefault();
+            handleMeasurementToggle();
+            break;
+          case 'Escape':
+            // Close any open dialogs/panels
+            setFileManagerOpen(false);
+            setImageExportOpen(false);
+            setAiGenerationOpen(false);
+            setLayerPanelOpen(false);
+            setAssetBrowserOpen(false);
+            setGridSettingsOpen(false);
+            setMeasurementToolActive(false);
+            setKeyboardShortcutsOpen(false);
+            break;
+          // Number keys for brush size
+          case '1':
+          case '2':
+          case '3':
+          case '4':
+          case '5':
+          case '6':
+          case '7':
+          case '8':
+          case '9':
+            event.preventDefault();
+            const size = parseInt(event.key);
+            handleBrushSizeChange(size);
+            showNotification(`Brush size: ${size}`, 'info');
             break;
         }
       }
@@ -252,7 +438,17 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleUndo, handleRedo, currentMap, showNotification, handleNewMap]);
+  }, [
+    handleUndo, 
+    handleRedo, 
+    currentMap, 
+    showNotification, 
+    handleNewMap, 
+    handleToolChange,
+    handleBrushSizeChange,
+    handleMeasurementToggle,
+    setIsDirty
+  ]);
 
   return (
     <ThemeProvider theme={theme}>
@@ -292,10 +488,44 @@ function App() {
             </IconButton>
             <IconButton
               color="inherit"
+              onClick={() => setAssetBrowserOpen(true)}
+              title="Asset Library"
+            >
+              <AssetsIcon />
+            </IconButton>
+            <IconButton
+              color="inherit"
+              onClick={() => setGridSettingsOpen(true)}
+              title="Grid Settings"
+            >
+              <GridIcon />
+            </IconButton>
+            <IconButton
+              color="inherit"
+              onClick={handleMeasurementToggle}
+              title="Measurement Tools"
+              sx={{
+                backgroundColor: measurementToolActive ? 'primary.main' : 'transparent',
+                '&:hover': {
+                  backgroundColor: measurementToolActive ? 'primary.dark' : 'rgba(255,255,255,0.1)',
+                }
+              }}
+            >
+              <RulerIcon />
+            </IconButton>
+            <IconButton
+              color="inherit"
               onClick={() => setFileManagerOpen(true)}
               title="File Manager"
             >
               <FolderIcon />
+            </IconButton>
+            <IconButton
+              color="inherit"
+              onClick={() => setKeyboardShortcutsOpen(true)}
+              title="Keyboard Shortcuts (Ctrl+?)"
+            >
+              <HelpIcon />
             </IconButton>
           </Toolbar>
         </AppBar>
@@ -321,6 +551,18 @@ function App() {
           <MenuItem onClick={() => { setLayerPanelOpen(true); handleMenuClose(); }}>
             <LayersIcon sx={{ mr: 1 }} />
             Manage Layers...
+          </MenuItem>
+          <MenuItem onClick={() => { setAssetBrowserOpen(true); handleMenuClose(); }}>
+            <AssetsIcon sx={{ mr: 1 }} />
+            Asset Library...
+          </MenuItem>
+          <MenuItem onClick={() => { setGridSettingsOpen(true); handleMenuClose(); }}>
+            <GridIcon sx={{ mr: 1 }} />
+            Grid Settings...
+          </MenuItem>
+          <MenuItem onClick={() => { handleMeasurementToggle(); handleMenuClose(); }}>
+            <RulerIcon sx={{ mr: 1 }} />
+            Measurement Tools
           </MenuItem>
           <Divider />
           <MenuItem 
@@ -350,6 +592,11 @@ function App() {
           <MenuItem onClick={() => { setImageExportOpen(true); handleMenuClose(); }}>
             <ImageIcon sx={{ mr: 1 }} />
             Export as Image...
+          </MenuItem>
+          <Divider />
+          <MenuItem onClick={() => { setKeyboardShortcutsOpen(true); handleMenuClose(); }}>
+            <HelpIcon sx={{ mr: 1 }} />
+            Keyboard Shortcuts...
           </MenuItem>
         </Menu>
 
@@ -509,6 +756,40 @@ function App() {
           onMapGenerated={handleAiMapGenerated}
         />
 
+        {/* Asset Browser */}
+        <AssetBrowser
+          isOpen={assetBrowserOpen}
+          onClose={() => setAssetBrowserOpen(false)}
+          onAssetSelect={handleAssetSelect}
+          selectedObjectType={toolState.selectedObjectType}
+        />
+
+        {/* Grid Settings */}
+        <GridSettings
+          open={gridSettingsOpen}
+          onClose={() => setGridSettingsOpen(false)}
+          gridConfig={currentMap.gridConfig}
+          onGridConfigChange={handleGridConfigChange}
+        />
+
+        {/* Measurement Tools */}
+        <MeasurementTools
+          gridConfig={currentMap.gridConfig}
+          isActive={measurementToolActive}
+          onToggle={handleMeasurementToggle}
+          viewportZoom={viewportState.zoom}
+          measurementPoints={measurementPoints}
+          measurementLines={measurementLines}
+          onAddPoint={handleAddMeasurementPoint}
+          onClearMeasurements={handleClearMeasurements}
+        />
+
+        {/* Keyboard Shortcuts Help */}
+        <KeyboardShortcuts
+          open={keyboardShortcutsOpen}
+          onClose={() => setKeyboardShortcutsOpen(false)}
+        />
+
         {/* Notification Snackbar */}
         <Snackbar
           open={notification.open}
@@ -525,21 +806,55 @@ function App() {
           </Alert>
         </Snackbar>
 
-        {/* Status Bar */}
+        {/* Enhanced Status Bar */}
         <Box 
           sx={{ 
-            height: 30, 
+            height: 32, 
             backgroundColor: 'background.paper', 
             borderTop: 1, 
             borderColor: 'divider',
             display: 'flex',
             alignItems: 'center',
+            justifyContent: 'space-between',
             px: 2
           }}
         >
-          <Typography variant="body2" color="text.secondary">
-            Ready • {currentMap.layers.length} layers • Grid: {currentMap.gridConfig.cellSize}px
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Typography variant="body2" color="text.secondary">
+              Ready
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Tool: {toolState.activeTool}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Brush: {toolState.brushSize}px
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Layers: {currentMap.layers.length}
+            </Typography>
+          </Box>
+          
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Typography variant="body2" color="text.secondary">
+              Grid: {currentMap.gridConfig.cellSize}px {currentMap.gridConfig.showGrid ? '(visible)' : '(hidden)'}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Zoom: {Math.round(viewportState.zoom * 100)}%
+            </Typography>
+            {measurementToolActive && (
+              <Typography variant="body2" color="primary.main" sx={{ fontWeight: 600 }}>
+                📏 Measuring
+              </Typography>
+            )}
+            {isDirty && (
+              <Typography variant="body2" color="warning.main" sx={{ fontWeight: 600 }}>
+                • Unsaved
+              </Typography>
+            )}
+            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+              Press ? for shortcuts
+            </Typography>
+          </Box>
         </Box>
       </Box>
     </ThemeProvider>
