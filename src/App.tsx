@@ -20,12 +20,14 @@ import {
   Save as SaveIcon,
   Folder as FolderIcon,
   Add as AddIcon,
-  Image as ImageIcon
+  Image as ImageIcon,
+  AutoAwesome as AutoAwesomeIcon
 } from '@mui/icons-material';
 import SimpleMapCanvas from './components/MapCanvas/SimpleMapCanvas';
 import MapToolbar from './components/Toolbar/Toolbar';
 import FileManager from './components/FileManager/FileManager';
 import ImageExportDialog from './components/ImageExport/ImageExportDialog';
+import { AIGenerationDialog } from './components/AIGeneration';
 import { 
   DnDMap, 
   ViewportState, 
@@ -80,6 +82,7 @@ function App() {
   const [selectedTiles, setSelectedTiles] = useState<Position[]>([]);
   const [fileManagerOpen, setFileManagerOpen] = useState(false);
   const [imageExportOpen, setImageExportOpen] = useState(false);
+  const [aiGenerationOpen, setAiGenerationOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [notification, setNotification] = useState<{
@@ -188,6 +191,13 @@ function App() {
     setNotification(prev => ({ ...prev, open: false }));
   }, []);
 
+  // AI generation handler
+  const handleAiMapGenerated = useCallback((map: DnDMap) => {
+    setCurrentMap(map);
+    setIsDirty(false);
+    showNotification(`AI generated map: ${map.metadata.name}`, 'success');
+  }, [showNotification]);
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -209,6 +219,14 @@ function App() {
             <Typography variant="body2" color="inherit" sx={{ mr: 2 }}>
               {currentMap.metadata.name} {isDirty && '(unsaved)'}
             </Typography>
+            <Button
+              color="inherit"
+              startIcon={<AutoAwesomeIcon />}
+              onClick={() => setAiGenerationOpen(true)}
+              sx={{ mr: 1 }}
+            >
+              AI Generate
+            </Button>
             <IconButton
               color="inherit"
               onClick={() => setFileManagerOpen(true)}
@@ -228,6 +246,10 @@ function App() {
           <MenuItem onClick={() => { handleNewMap(); handleMenuClose(); }}>
             <AddIcon sx={{ mr: 1 }} />
             New Map
+          </MenuItem>
+          <MenuItem onClick={() => { setAiGenerationOpen(true); handleMenuClose(); }}>
+            <AutoAwesomeIcon sx={{ mr: 1 }} />
+            Generate with AI...
           </MenuItem>
           <MenuItem onClick={() => { setFileManagerOpen(true); handleMenuClose(); }}>
             <FolderIcon sx={{ mr: 1 }} />
@@ -312,6 +334,13 @@ function App() {
           open={imageExportOpen}
           onClose={() => setImageExportOpen(false)}
           map={currentMap}
+        />
+
+        {/* AI Generation Dialog */}
+        <AIGenerationDialog
+          open={aiGenerationOpen}
+          onClose={() => setAiGenerationOpen(false)}
+          onMapGenerated={handleAiMapGenerated}
         />
 
         {/* Notification Snackbar */}
