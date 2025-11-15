@@ -65,10 +65,15 @@ class MapEditingService {
   paintTerrain(
     map: DnDMap, 
     position: Position, 
-    options: PaintOptions
+    options: PaintOptions,
+    targetLayerId?: string
   ): { success: boolean; updatedMap: DnDMap; action?: EditAction } {
-    const terrainLayer = map.layers.find(layer => layer.type === 'terrain');
-    if (!terrainLayer || !terrainLayer.tiles) {
+    // Find target layer - use specified layer or first terrain layer
+    const terrainLayer = targetLayerId 
+      ? map.layers.find(layer => layer.id === targetLayerId && layer.type === 'terrain')
+      : map.layers.find(layer => layer.type === 'terrain');
+      
+    if (!terrainLayer || !terrainLayer.tiles || terrainLayer.isLocked) {
       return { success: false, updatedMap: map };
     }
 
@@ -140,23 +145,29 @@ class MapEditingService {
   eraseTerrain(
     map: DnDMap, 
     position: Position, 
-    brushOptions: BrushOptions
+    brushOptions: BrushOptions,
+    targetLayerId?: string
   ): { success: boolean; updatedMap: DnDMap; action?: EditAction } {
     return this.paintTerrain(map, position, {
       terrainType: TerrainType.FLOOR,
       color: DEFAULT_TERRAIN_COLORS[TerrainType.FLOOR],
       brushOptions
-    });
+    }, targetLayerId);
   }
 
   // Place an object on the map
   placeObject(
     map: DnDMap,
     position: Position,
-    options: ObjectPlacementOptions
+    options: ObjectPlacementOptions,
+    targetLayerId?: string
   ): { success: boolean; updatedMap: DnDMap; action?: EditAction } {
-    const objectsLayer = map.layers.find(layer => layer.type === 'objects');
-    if (!objectsLayer) {
+    // Find target layer - use specified layer or first objects layer
+    const objectsLayer = targetLayerId 
+      ? map.layers.find(layer => layer.id === targetLayerId && layer.type === 'objects')
+      : map.layers.find(layer => layer.type === 'objects');
+      
+    if (!objectsLayer || objectsLayer.isLocked) {
       return { success: false, updatedMap: map };
     }
 

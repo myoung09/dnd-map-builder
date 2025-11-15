@@ -23,13 +23,15 @@ import {
   Image as ImageIcon,
   AutoAwesome as AutoAwesomeIcon,
   Undo as UndoIcon,
-  Redo as RedoIcon
+  Redo as RedoIcon,
+  Layers as LayersIcon
 } from '@mui/icons-material';
 import SimpleMapCanvas from './components/MapCanvas/SimpleMapCanvas';
 import MapToolbar from './components/Toolbar/Toolbar';
 import FileManager from './components/FileManager/FileManager';
 import ImageExportDialog from './components/ImageExport/ImageExportDialog';
 import { AIGenerationDialog } from './components/AIGeneration';
+import { LayerPanel } from './components/LayerPanel';
 import { 
   DnDMap, 
   ViewportState, 
@@ -85,6 +87,7 @@ function App() {
   const [fileManagerOpen, setFileManagerOpen] = useState(false);
   const [imageExportOpen, setImageExportOpen] = useState(false);
   const [aiGenerationOpen, setAiGenerationOpen] = useState(false);
+  const [layerPanelOpen, setLayerPanelOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [notification, setNotification] = useState<{
@@ -282,6 +285,13 @@ function App() {
             </Button>
             <IconButton
               color="inherit"
+              onClick={() => setLayerPanelOpen(true)}
+              title="Layers Panel"
+            >
+              <LayersIcon />
+            </IconButton>
+            <IconButton
+              color="inherit"
               onClick={() => setFileManagerOpen(true)}
               title="File Manager"
             >
@@ -307,6 +317,10 @@ function App() {
           <MenuItem onClick={() => { setFileManagerOpen(true); handleMenuClose(); }}>
             <FolderIcon sx={{ mr: 1 }} />
             Open Map...
+          </MenuItem>
+          <MenuItem onClick={() => { setLayerPanelOpen(true); handleMenuClose(); }}>
+            <LayersIcon sx={{ mr: 1 }} />
+            Manage Layers...
           </MenuItem>
           <Divider />
           <MenuItem 
@@ -352,6 +366,19 @@ function App() {
             selectedColor={toolState.selectedColor}
             onColorChange={handleColorChange}
           />
+
+          {/* Layer Panel (if open) */}
+          {layerPanelOpen && (
+            <LayerPanel
+              map={currentMap}
+              onMapChange={handleMapChange}
+              activeLayerId={toolState.selectedLayer}
+              onActiveLayerChange={(layerId) => 
+                setToolState(prev => ({ ...prev, selectedLayer: layerId }))
+              }
+              onClose={() => setLayerPanelOpen(false)}
+            />
+          )}
 
           {/* Map Canvas */}
           <Box sx={{ flex: 1, position: 'relative' }}>

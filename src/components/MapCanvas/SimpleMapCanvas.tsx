@@ -88,7 +88,7 @@ const MapCanvas: React.FC<MapCanvasProps> = ({
           color: toolState.selectedColor,
           brushOptions
         };
-        const result = mapEditingService.paintTerrain(map, gridPos, paintOptions);
+        const result = mapEditingService.paintTerrain(map, gridPos, paintOptions, toolState.selectedLayer);
         if (result.success) {
           onMapChange(result.updatedMap);
         }
@@ -100,7 +100,7 @@ const MapCanvas: React.FC<MapCanvasProps> = ({
           size: toolState.brushSize,
           shape: 'square',
           opacity: 1
-        });
+        }, toolState.selectedLayer);
         if (eraseResult.success) {
           onMapChange(eraseResult.updatedMap);
         }
@@ -113,7 +113,7 @@ const MapCanvas: React.FC<MapCanvasProps> = ({
           name: `${toolState.selectedObjectType} Object`,
           color: toolState.selectedColor
         };
-        const placeResult = mapEditingService.placeObject(map, gridPos, placementOptions);
+        const placeResult = mapEditingService.placeObject(map, gridPos, placementOptions, toolState.selectedLayer);
         if (placeResult.success) {
           onMapChange(placeResult.updatedMap);
         }
@@ -165,7 +165,7 @@ const MapCanvas: React.FC<MapCanvasProps> = ({
           color: toolState.selectedColor,
           brushOptions
         };
-        const result = mapEditingService.paintTerrain(map, gridPos, paintOptions);
+        const result = mapEditingService.paintTerrain(map, gridPos, paintOptions, toolState.selectedLayer);
         if (result.success) {
           onMapChange(result.updatedMap);
         }
@@ -176,7 +176,7 @@ const MapCanvas: React.FC<MapCanvasProps> = ({
           size: toolState.brushSize,
           shape: 'square',
           opacity: 1
-        });
+        }, toolState.selectedLayer);
         if (eraseResult.success) {
           onMapChange(eraseResult.updatedMap);
         }
@@ -287,14 +287,13 @@ const MapCanvas: React.FC<MapCanvasProps> = ({
     return lines;
   };
 
-  // Render terrain tiles
-  const renderTerrain = () => {
-    const terrainLayer = map.layers.find(layer => layer.type === 'terrain');
-    if (!terrainLayer?.tiles) return null;
+  // Render terrain tiles for a specific layer
+  const renderTerrainLayer = (layer: any) => {
+    if (!layer.tiles || !layer.isVisible) return null;
 
-    return terrainLayer.tiles.map((tile, index) => (
+    return layer.tiles.map((tile: any, index: number) => (
       <Rect
-        key={`tile-${index}`}
+        key={`tile-${layer.id}-${index}`}
         x={tile.position.x * gridSize}
         y={tile.position.y * gridSize}
         width={gridSize}
@@ -302,20 +301,20 @@ const MapCanvas: React.FC<MapCanvasProps> = ({
         fill={tile.color ? `rgb(${tile.color.r}, ${tile.color.g}, ${tile.color.b})` : '#666666'}
         stroke="#222"
         strokeWidth={0.5}
+        opacity={layer.opacity || 1}
       />
     ));
   };
 
-  // Render objects
-  const renderObjects = () => {
-    const objectsLayer = map.layers.find(layer => layer.type === 'objects');
-    if (!objectsLayer?.objects) return null;
+  // Render objects for a specific layer
+  const renderObjectsLayer = (layer: any) => {
+    if (!layer.objects || !layer.isVisible) return null;
 
-    return objectsLayer.objects.map((obj: MapObject) => {
+    return layer.objects.map((obj: MapObject) => {
       const isSelected = selectedObjects.includes(obj.id);
       
       return (
-        <Group key={`object-${obj.id}`}>
+        <Group key={`object-${obj.id}`} opacity={layer.opacity || 1}>
           <Rect
             x={obj.position.x * gridSize}
             y={obj.position.y * gridSize}
@@ -336,6 +335,20 @@ const MapCanvas: React.FC<MapCanvasProps> = ({
           />
         </Group>
       );
+    });
+  };
+
+  // Render all layers in order
+  const renderLayers = () => {
+    return map.layers.map(layer => {
+      switch (layer.type) {
+        case 'terrain':
+          return renderTerrainLayer(layer);
+        case 'objects':
+          return renderObjectsLayer(layer);
+        default:
+          return null;
+      }
     });
   };
 
@@ -377,11 +390,8 @@ const MapCanvas: React.FC<MapCanvasProps> = ({
           {/* Grid */}
           {renderGrid()}
           
-          {/* Terrain */}
-          {renderTerrain()}
-          
-          {/* Objects */}
-          {renderObjects()}
+          {/* All Layers in Order */}
+          {renderLayers()}
         </Layer>
       </Stage>
     </div>
