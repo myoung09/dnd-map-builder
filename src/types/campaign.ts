@@ -417,6 +417,7 @@ export interface CampaignSettings {
   mapStyle: 'dungeon' | 'wilderness' | 'city' | 'mixed';
   generateNPCPortraits: boolean;
   createHandouts: boolean;
+  generationSeed?: string; // For reproducible map generation
 }
 
 // Simple campaign story for the builder dialog

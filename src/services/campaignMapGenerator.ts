@@ -466,7 +466,9 @@ class CampaignMapGeneratorService {
       style,
       complexity,
       includeObjects: settings.detailLevel !== 'basic',
-      seed: `${poi.id}-${Date.now()}`
+      seed: settings.generationSeed 
+        ? `${settings.generationSeed}-${poi.id}` // Use user seed + POI ID for consistency
+        : `${poi.id}-${Date.now()}` // Random seed if no user seed provided
     };
   }
 

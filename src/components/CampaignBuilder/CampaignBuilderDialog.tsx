@@ -404,6 +404,19 @@ const CampaignBuilderDialog: React.FC<CampaignBuilderDialogProps> = ({
                     label="Create player handouts and summaries"
                   />
                 </Grid>
+                <Grid size={{ xs: 12 }}>
+                  <TextField
+                    label="Generation Seed (Optional)"
+                    fullWidth
+                    value={campaignSettings.generationSeed || ''}
+                    onChange={(e) => setCampaignSettings(prev => ({
+                      ...prev,
+                      generationSeed: e.target.value || undefined
+                    }))}
+                    placeholder="Enter a seed for reproducible map generation (e.g., 'MyAwesomeCampaign123')"
+                    helperText="Using the same seed will generate identical maps each time. Leave empty for random generation."
+                  />
+                </Grid>
               </Grid>
             </Paper>
           </Box>

@@ -1,13 +1,14 @@
 import { DnDMap, MapObject, TerrainType, ObjectType } from '../types/map';
 import { createNewMap, DEFAULT_TERRAIN_COLORS } from '../utils/mapUtils';
 import { AI_GENERATION } from '../utils/constants';
+import { proceduralGenerationService, AssetGenerationContext } from './proceduralGenerationService';
 
 export interface AIGenerationOptions {
   mapSize: { width: number; height: number };
   style: 'dungeon' | 'wilderness' | 'city' | 'tavern' | 'temple' | 'custom';
   complexity: 'simple' | 'moderate' | 'complex';
   includeObjects: boolean;
-  seed?: string; // For reproducible results
+  seed?: string; // For reproducible results - will generate same map every time
 }
 
 export interface AIGenerationResult {
@@ -99,13 +100,64 @@ class AIMapGenerationService {
     }
   }
 
-  // Mock generation for demonstration (replace with real AI API)
+  // Enhanced generation using procedural algorithms (replace with real AI API for production)
   private async mockGenerateMapData(prompt: string, options: AIGenerationOptions): Promise<ParsedMapData> {
+    // Set the seed for reproducible generation
+    if (options.seed) {
+      proceduralGenerationService.setSeed(options.seed);
+    }
+    
     // Simulate AI processing delay
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     const { width, height } = options.mapSize;
+    
+    // Extract terrain types from prompt analysis
+    const promptLower = prompt.toLowerCase();
+    const terrainTypes = this.extractTerrainTypes(promptLower);
+    
+    // Generate terrain layout using procedural algorithms
+    const terrainLayout = proceduralGenerationService.generateTerrainLayout(
+      { width, height },
+      terrainTypes,
+      options.style
+    );
+
+    // Convert terrain layout to ParsedMapData format
     const terrain: Array<{ x: number; y: number; type: TerrainType; description?: string }> = [];
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        terrain.push({ 
+          x, 
+          y, 
+          type: terrainLayout[y][x],
+          description: this.getTerrainDescription(terrainLayout[y][x])
+        });
+      }
+    }
+
+    // Create asset generation context from prompt
+    const context: AssetGenerationContext = {
+      poiType: this.extractPOIType(promptLower),
+      difficulty: this.extractDifficulty(promptLower),
+      mood: this.extractMood(promptLower),
+      theme: options.style,
+      size: { width, height },
+      requiredFeatures: this.extractRequiredFeatures(promptLower),
+      terrainTypes
+    };
+
+    // Generate procedural assets
+    const proceduralAssets = proceduralGenerationService.generateAssetsForPOI(context);
+    
+    // Place assets on the map
+    const placedObjects = proceduralGenerationService.generateAssetPlacements(
+      proceduralAssets,
+      { width, height },
+      terrainLayout
+    );
+
+    // Convert MapObjects to ParsedMapData format
     const objects: Array<{ 
       x: number; 
       y: number; 
@@ -114,34 +166,15 @@ class AIMapGenerationService {
       type: ObjectType; 
       name: string; 
       description?: string 
-    }> = [];
-
-    // Generate based on style and prompt keywords
-    const promptLower = prompt.toLowerCase();
-    
-    // Determine primary terrain based on prompt
-    let primaryTerrain = TerrainType.FLOOR;
-    let wallTerrain = TerrainType.WALL;
-    
-    if (promptLower.includes('forest') || promptLower.includes('wilderness')) {
-      primaryTerrain = TerrainType.GRASS;
-      wallTerrain = TerrainType.WALL;
-    } else if (promptLower.includes('water') || promptLower.includes('lake') || promptLower.includes('river')) {
-      primaryTerrain = TerrainType.WATER;
-    } else if (promptLower.includes('desert') || promptLower.includes('sand')) {
-      primaryTerrain = TerrainType.SAND;
-    } else if (promptLower.includes('cave') || promptLower.includes('stone')) {
-      primaryTerrain = TerrainType.STONE;
-    }
-
-    // Generate basic room/area structure
-    if (options.style === 'dungeon' || promptLower.includes('dungeon') || promptLower.includes('room')) {
-      this.generateDungeonLayout(terrain, objects, width, height, options);
-    } else if (options.style === 'wilderness' || promptLower.includes('forest') || promptLower.includes('wilderness')) {
-      this.generateWildernessLayout(terrain, objects, width, height, options);
-    } else {
-      this.generateGenericLayout(terrain, objects, width, height, primaryTerrain, wallTerrain, options);
-    }
+    }> = placedObjects.map(obj => ({
+      x: obj.position.x,
+      y: obj.position.y,
+      width: obj.size.width,
+      height: obj.size.height,
+      type: obj.type,
+      name: obj.name,
+      description: obj.description
+    }));
 
     // Generate name and description
     const mapName = this.generateMapName(prompt, options.style);
@@ -462,6 +495,91 @@ class AIMapGenerationService {
       { value: 'temple', label: 'Temple', description: 'Religious or ceremonial spaces' },
       { value: 'custom', label: 'Custom', description: 'Let AI determine based on prompt' }
     ];
+  }
+
+  // Helper methods for prompt analysis
+  private extractTerrainTypes(prompt: string): string[] {
+    const terrainKeywords = {
+      'water': ['water', 'lake', 'river', 'ocean', 'pond', 'stream'],
+      'grass': ['forest', 'field', 'meadow', 'plains', 'wilderness', 'grass'],
+      'stone': ['cave', 'stone', 'rocky', 'mountain', 'cliff'],
+      'dirt': ['dirt', 'earth', 'soil', 'mud'],
+      'sand': ['desert', 'beach', 'sand', 'dune'],
+      'wood': ['wooden', 'timber', 'forest floor'],
+      'ice': ['ice', 'frozen', 'glacier', 'tundra']
+    };
+
+    const foundTypes: string[] = [];
+    for (const [terrain, keywords] of Object.entries(terrainKeywords)) {
+      if (keywords.some(keyword => prompt.includes(keyword))) {
+        foundTypes.push(terrain);
+      }
+    }
+
+    return foundTypes.length > 0 ? foundTypes : ['stone', 'dirt'];
+  }
+
+  private getTerrainDescription(terrainType: TerrainType): string {
+    const descriptions = {
+      [TerrainType.WALL]: 'A solid stone wall',
+      [TerrainType.FLOOR]: 'A sturdy floor surface',
+      [TerrainType.DOOR]: 'A wooden door',
+      [TerrainType.WATER]: 'Clear blue water',
+      [TerrainType.GRASS]: 'Lush green grass',
+      [TerrainType.STONE]: 'Rough stone surface',
+      [TerrainType.DIRT]: 'Packed earth',
+      [TerrainType.SAND]: 'Fine golden sand',
+      [TerrainType.WOOD]: 'Wooden planks',
+      [TerrainType.ICE]: 'Slippery ice',
+      [TerrainType.METAL]: 'Metal plating',
+      [TerrainType.LAVA]: 'Molten lava',
+      [TerrainType.TRAP]: 'Hidden trap mechanism',
+      [TerrainType.DIFFICULT_TERRAIN]: 'Difficult to traverse terrain',
+      [TerrainType.IMPASSABLE]: 'Impassable barrier'
+    };
+
+    return descriptions[terrainType] || 'Unknown terrain';
+  }
+
+  private extractPOIType(prompt: string): string {
+    if (prompt.includes('dungeon') || prompt.includes('chamber')) return 'dungeon';
+    if (prompt.includes('forest') || prompt.includes('wilderness')) return 'wilderness';
+    if (prompt.includes('temple') || prompt.includes('shrine')) return 'temple';
+    if (prompt.includes('tavern') || prompt.includes('inn')) return 'tavern';
+    if (prompt.includes('city') || prompt.includes('town')) return 'city';
+    return 'dungeon';
+  }
+
+  private extractDifficulty(prompt: string): number {
+    if (prompt.includes('easy') || prompt.includes('simple')) return 3;
+    if (prompt.includes('hard') || prompt.includes('difficult') || prompt.includes('challenging')) return 8;
+    if (prompt.includes('deadly') || prompt.includes('extreme')) return 10;
+    return 5; // Default moderate difficulty
+  }
+
+  private extractMood(prompt: string): string {
+    if (prompt.includes('peaceful') || prompt.includes('serene')) return 'peaceful';
+    if (prompt.includes('ominous') || prompt.includes('dark') || prompt.includes('evil')) return 'ominous';
+    if (prompt.includes('mysterious') || prompt.includes('secret')) return 'mysterious';
+    if (prompt.includes('chaotic') || prompt.includes('battle') || prompt.includes('war')) return 'chaotic';
+    if (prompt.includes('cheerful') || prompt.includes('bright') || prompt.includes('happy')) return 'cheerful';
+    if (prompt.includes('tense') || prompt.includes('dangerous')) return 'tense';
+    return 'neutral';
+  }
+
+  private extractRequiredFeatures(prompt: string): string[] {
+    const features: string[] = [];
+    
+    if (prompt.includes('altar') || prompt.includes('shrine')) features.push('altar');
+    if (prompt.includes('trap') || prompt.includes('trapped')) features.push('trap');
+    if (prompt.includes('treasure') || prompt.includes('chest')) features.push('treasure_chest');
+    if (prompt.includes('secret') || prompt.includes('hidden')) features.push('secret_door');
+    if (prompt.includes('fountain')) features.push('fountain');
+    if (prompt.includes('statue')) features.push('statue');
+    if (prompt.includes('pillar') || prompt.includes('column')) features.push('pillar');
+    if (prompt.includes('pit') || prompt.includes('hole')) features.push('pit');
+    
+    return features;
   }
 }
 
