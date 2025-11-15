@@ -312,7 +312,7 @@ class CampaignMapGeneratorService {
         createdAt: new Date(),
         updatedAt: new Date(),
         version: '1.0.0',
-        tags: [poi.type, poi.category.replace('_', ' ')],
+        tags: [poi.type, poi.category ? poi.category.replace('_', ' ') : 'other'].filter(Boolean),
         generationHistory: [{
           id: `gen-${Date.now()}`,
           timestamp: new Date(),

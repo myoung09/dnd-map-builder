@@ -537,10 +537,10 @@ const POIManager: React.FC<POIManagerProps> = ({ pointsOfInterest, onPOIsChanged
                       {poi.name || 'Unnamed POI'}
                     </Typography>
                     <Chip
-                      label={poi.category.replace('_', ' ')}
+                      label={poi.category ? poi.category.replace('_', ' ') : 'Unknown'}
                       size="small"
                       sx={{ 
-                        bgcolor: getCategoryColor(poi.category),
+                        bgcolor: getCategoryColor(poi.category || 'other'),
                         color: 'white',
                         textTransform: 'capitalize'
                       }}

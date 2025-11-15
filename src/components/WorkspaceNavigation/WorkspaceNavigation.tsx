@@ -76,8 +76,8 @@ const FolderItem: React.FC<FolderItemProps> = ({
   const mapsInFolder = workspaceService.getMapsInFolder(folder.id);
   const filteredMaps = mapsInFolder.filter(map => 
     !searchQuery || 
-    map.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    map.description.toLowerCase().includes(searchQuery.toLowerCase())
+    (map.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (map.description || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handleMenuClick = (event: React.MouseEvent<HTMLElement>) => {
@@ -311,8 +311,8 @@ const WorkspaceNavigation: React.FC<WorkspaceNavigationProps> = ({
   const rootMaps = workspaceService.getMapsInFolder();
   const filteredRootMaps = rootMaps.filter(map => {
     const matchesSearch = !searchQuery || 
-      map.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      map.description.toLowerCase().includes(searchQuery.toLowerCase());
+      (map.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (map.description || '').toLowerCase().includes(searchQuery.toLowerCase());
     
     const matchesCategory = selectedCategory === 'all' || map.category === selectedCategory;
     

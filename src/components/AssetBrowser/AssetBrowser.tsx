@@ -131,8 +131,8 @@ const AssetBrowser: React.FC<AssetBrowserProps> = ({
 
   // Filter assets based on search and category
   const filteredAssets = assets.filter(asset => {
-    const matchesSearch = asset.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         asset.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
+    const matchesSearch = (asset.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (asset.tags || []).some(tag => (tag || '').toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesCategory = !selectedCategory || asset.category === selectedCategory;
     const matchesObjectType = !selectedObjectType || 
                              (selectedObjectType === ObjectType.FURNITURE && asset.category === AssetCategory.FURNITURE) ||
@@ -183,7 +183,7 @@ const AssetBrowser: React.FC<AssetBrowserProps> = ({
           const dataUrl = e.target?.result as string;
           const newAsset: Asset = {
             id: `custom-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            name: file.name.replace(/\.[^/.]+$/, ''), // Remove file extension
+            name: (file.name || 'asset').replace(/\.[^/.]+$/, ''), // Remove file extension
             type: 'sprite',
             category: AssetCategory.CUSTOM,
             tags: ['custom', 'uploaded'],
@@ -218,7 +218,8 @@ const AssetBrowser: React.FC<AssetBrowserProps> = ({
   };
 
   const getCategoryDisplayName = (category: AssetCategory) => {
-    return category.charAt(0).toUpperCase() + category.slice(1).replace('_', ' ');
+    const categoryStr = category || 'other';
+    return categoryStr.charAt(0).toUpperCase() + categoryStr.slice(1).replace('_', ' ');
   };
 
   return (

@@ -122,7 +122,7 @@ export class DragDropHandler {
       }
 
       // Organize by folder structure (basic path parsing)
-      const pathParts = file.path.split('/');
+      const pathParts = (file.path || '').split('/');
       if (pathParts.length > 1) {
         const folder = pathParts[0];
         if (!result.folderStructure.has(folder)) {
@@ -187,7 +187,7 @@ export class DragDropHandler {
     const fileMap = new Map<string, DroppedFile[]>();
 
     files.forEach(file => {
-      const pathParts = file.path.split('/');
+      const pathParts = (file.path || '').split('/');
       
       // Create folder hierarchy
       for (let i = 1; i <= pathParts.length; i++) {

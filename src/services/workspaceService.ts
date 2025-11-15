@@ -411,9 +411,9 @@ class WorkspaceService {
 
     return this.currentWorkspace.maps.filter(map => {
       const matchesQuery = !query || 
-        map.name.toLowerCase().includes(query.toLowerCase()) ||
-        map.description.toLowerCase().includes(query.toLowerCase()) ||
-        map.tags.some(tag => tag.toLowerCase().includes(query.toLowerCase()));
+        (map.name || '').toLowerCase().includes(query.toLowerCase()) ||
+        (map.description || '').toLowerCase().includes(query.toLowerCase()) ||
+        (map.tags || []).some(tag => (tag || '').toLowerCase().includes(query.toLowerCase()));
         
       const matchesCategory = !category || map.category === category;
       

@@ -191,7 +191,7 @@ const FileManager: React.FC<FileManagerProps> = ({
   };
 
   const filteredMaps = savedMaps.filter(map =>
-    map.name.toLowerCase().includes(searchTerm.toLowerCase())
+    (map.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const formatFileSize = (bytes: number) => {

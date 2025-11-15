@@ -59,7 +59,8 @@ const ImageExportDialog: React.FC<ImageExportDialogProps> = ({
   // Update filename when map changes
   useEffect(() => {
     if (map) {
-      const cleanName = map.metadata.name.replace(/[^a-z0-9]/gi, '_');
+      const mapName = map.metadata?.name || 'map';
+      const cleanName = mapName.replace(/[^a-z0-9]/gi, '_');
       setFilename(`${cleanName}.${options.format}`);
     }
   }, [map, options.format]);

@@ -27,6 +27,7 @@ import {
   LocationOn as POIIcon
 } from '@mui/icons-material';
 import { CampaignStoryAnalyzer } from '../../services/campaignStoryAnalyzer';
+import { campaignMapGenerator } from '../../services/campaignMapGenerator';
 import POIManager from './POIManager';
 import {
   SimpleCampaignStory,
@@ -35,11 +36,12 @@ import {
   DetectedNPC,
   CampaignSettings
 } from '../../types/campaign';
+import { Workspace } from '../../types/workspace';
 
 interface CampaignBuilderDialogProps {
   open: boolean;
   onClose: () => void;
-  onCampaignGenerated: (story: SimpleCampaignStory, pointsOfInterest: PointOfInterest[]) => void;
+  onCampaignGenerated: (workspace: Workspace | null) => void;
 }
 
 const CampaignBuilderDialog: React.FC<CampaignBuilderDialogProps> = ({
@@ -74,6 +76,8 @@ const CampaignBuilderDialog: React.FC<CampaignBuilderDialogProps> = ({
     generateNPCPortraits: false,
     createHandouts: true
   });
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generationError, setGenerationError] = useState<string | null>(null);
 
   const steps = [
     'Story Input',
@@ -102,10 +106,10 @@ const CampaignBuilderDialog: React.FC<CampaignBuilderDialogProps> = ({
       // Convert suggested POIs to full POIs
       const convertedPOIs: PointOfInterest[] = results.suggestedPOIs.map((suggestedPOI, index) => ({
         id: `poi-${Date.now()}-${index}`,
-        name: suggestedPOI.name,
-        type: suggestedPOI.type,
-        category: suggestedPOI.category,
-        description: suggestedPOI.description,
+        name: suggestedPOI.name || 'Unnamed POI',
+        type: suggestedPOI.type || 'dungeon',
+        category: suggestedPOI.category || 'main_quest',
+        description: suggestedPOI.description || 'No description available',
         storyRelevance: 'important', // Default value since importance doesn't exist
         mapRequirements: {
           dimensions: { width: 30, height: 30 }, // Default dimensions
@@ -128,8 +132,8 @@ const CampaignBuilderDialog: React.FC<CampaignBuilderDialogProps> = ({
         },
         connections: [],
         npcs: results.detectedNPCs.filter(npc => 
-          npc.name.toLowerCase().includes(suggestedPOI.name.toLowerCase())
-        ).map(npc => npc.name),
+          (npc.name || '').toLowerCase().includes((suggestedPOI.name || '').toLowerCase())
+        ).map(npc => npc.name || 'Unknown NPC'),
         encounters: [],
         treasures: [],
         secrets: [],
@@ -175,9 +179,33 @@ const CampaignBuilderDialog: React.FC<CampaignBuilderDialogProps> = ({
     setActiveStep((prevActiveStep) => prevActiveStep - 1);
   };
 
-  const handleGenerate = () => {
-    onCampaignGenerated(campaignStory, pointsOfInterest);
-    onClose();
+  const handleGenerate = async () => {
+    setIsGenerating(true);
+    setGenerationError(null);
+    
+    try {
+      const result = await campaignMapGenerator.generateCampaignMaps({
+        story: campaignStory,
+        pointsOfInterest,
+        settings: campaignSettings,
+        workspaceName: campaignStory.title || 'New Campaign'
+      });
+      
+      console.log('Campaign generation result:', result);
+      console.log('Workspace structure:', result.workspace);
+      
+      if (result.workspace) {
+        onCampaignGenerated(result.workspace);
+        onClose();
+      } else {
+        setGenerationError('No workspace was created during generation');
+      }
+    } catch (error) {
+      console.error('Failed to generate campaign:', error);
+      setGenerationError(error instanceof Error ? error.message : 'Failed to generate campaign');
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const handleReset = () => {
@@ -443,6 +471,12 @@ const CampaignBuilderDialog: React.FC<CampaignBuilderDialogProps> = ({
         <Box sx={{ flex: 1, overflow: 'auto', mt: 2 }}>
           {renderStepContent()}
         </Box>
+
+        {generationError && (
+          <Alert severity="error" sx={{ mt: 2 }}>
+            {generationError}
+          </Alert>
+        )}
       </DialogContent>
 
       <DialogActions sx={{ p: 2, pt: 1 }}>
@@ -472,11 +506,11 @@ const CampaignBuilderDialog: React.FC<CampaignBuilderDialogProps> = ({
           <Button
             variant="contained"
             onClick={handleGenerate}
-            disabled={!canProceed()}
-            startIcon={<GenerateIcon />}
+            disabled={!canProceed() || isGenerating}
+            startIcon={isGenerating ? undefined : <GenerateIcon />}
             color="primary"
           >
-            Generate Campaign
+            {isGenerating ? 'Generating Campaign...' : 'Generate Campaign'}
           </Button>
         )}
       </DialogActions>

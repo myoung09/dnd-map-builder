@@ -255,7 +255,7 @@ class ImageExportService {
       link.href = url;
       
       const format = options.format || EXPORT_SETTINGS.DEFAULT_FORMAT;
-      const mapName = map.metadata.name.replace(/[^a-z0-9]/gi, '_');
+      const mapName = (map.metadata?.name || 'map').replace(/[^a-z0-9]/gi, '_');
       link.download = filename || `${mapName}.${format}`;
       
       // Trigger download

@@ -134,7 +134,8 @@ class FileService {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = filename || `${map.metadata.name.replace(/[^a-z0-9]/gi, '_')}.json`;
+      const mapName = map.metadata?.name || 'map';
+      link.download = filename || `${mapName.replace(/[^a-z0-9]/gi, '_')}.json`;
       
       // Trigger download
       document.body.appendChild(link);

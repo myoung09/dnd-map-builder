@@ -339,7 +339,7 @@ export class WorkspaceExportImportService {
       errors.push('Workspace must have a valid ID');
     }
 
-    if (!workspace.metadata.name.trim()) {
+    if (!(workspace.metadata.name || '').trim()) {
       errors.push('Workspace must have a valid name');
     }
 

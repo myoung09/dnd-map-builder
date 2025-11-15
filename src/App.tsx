@@ -95,7 +95,7 @@ function App() {
     selectedTerrainType: TerrainType.WALL,
     selectedObjectType: 'furniture' as any,
     selectedColor: { r: 64, g: 64, b: 64 },
-    selectedLayer: currentMap.layers[1].id // Terrain layer
+    selectedLayer: currentMap.layers[1]?.id || currentMap.layers[0]?.id || '' // Terrain layer or fallback
   });
 
   // Workspace state
@@ -220,19 +220,31 @@ function App() {
 
   // Campaign builder handler
   const handleCampaignGenerated = useCallback((workspace: any) => {
+    console.log('Received workspace in App:', workspace);
+    
     // If workspace is provided, load it
     if (workspace) {
+      console.log('Workspace maps:', workspace.maps);
+      console.log('Workspace metadata:', workspace.metadata);
+      
       setCurrentWorkspace(workspace);
       
       // Load the first map if available
       if (workspace.maps && workspace.maps.length > 0) {
         const firstMap = workspace.maps[0];
-        setCurrentMap(firstMap.mapData);
-        setSelectedMapId(firstMap.id);
-        setIsDirty(false);
+        console.log('First map:', firstMap);
+        
+        if (firstMap && firstMap.mapData && firstMap.id) {
+          setCurrentMap(firstMap.mapData);
+          setSelectedMapId(firstMap.id);
+          setIsDirty(false);
+        }
       }
       
-      showNotification(`Campaign workspace created: ${workspace.metadata.name}`, 'success');
+      const workspaceName = workspace.metadata?.name || 'New Campaign';
+      showNotification(`Campaign workspace created: ${workspaceName}`, 'success');
+    } else {
+      console.error('No workspace provided to handleCampaignGenerated');
     }
     
     setCampaignBuilderOpen(false);
@@ -276,14 +288,16 @@ function App() {
     setSelectedMapId(null);
     
     // If workspace has maps, load the first one
-    if (workspace.maps.length > 0) {
+    if (workspace.maps && workspace.maps.length > 0) {
       const firstMap = workspace.maps[0];
-      setCurrentMap(firstMap.mapData);
-      setSelectedMapId(firstMap.id);
-      setIsDirty(false);
+      if (firstMap && firstMap.mapData && firstMap.id) {
+        setCurrentMap(firstMap.mapData);
+        setSelectedMapId(firstMap.id);
+        setIsDirty(false);
+      }
     }
     
-    showNotification(`Loaded workspace: ${workspace.metadata.name}`, 'success');
+    showNotification(`Loaded workspace: ${workspace.metadata?.name || 'Workspace'}`, 'success');
   }, [showNotification]);
 
   const handleWorkspaceMapSelected = useCallback((mapId: string) => {
@@ -318,10 +332,10 @@ function App() {
     // Add current map to workspace
     workspaceService.addMap(currentMap, 'other');
     const updatedWorkspace = workspaceService.getCurrentWorkspace();
-    if (updatedWorkspace) {
+    if (updatedWorkspace && currentMap.metadata?.id) {
       setCurrentWorkspace(updatedWorkspace);
       setSelectedMapId(currentMap.metadata.id);
-      showNotification(`Added map to workspace: ${currentMap.metadata.name}`, 'success');
+      showNotification(`Added map to workspace: ${currentMap.metadata?.name || 'Map'}`, 'success');
     }
   }, [currentWorkspace, currentMap, showNotification]);
 
