@@ -1,4 +1,5 @@
 import { workspaceService } from './workspaceService';
+import { aiMapGenerationService, AIGenerationOptions } from './aiGenerationService';
 import {
   PointOfInterest,
   SimpleCampaignStory,
@@ -238,21 +239,25 @@ class CampaignMapGeneratorService {
     }
 
     try {
-      // Convert POI to map generation parameters
-      const generationParams = this.poiToMapParams(poi, settings);
+      // Convert POI to AI generation prompt and options
+      const prompt = this.poiToPrompt(poi);
+      const options = this.poiToAIOptions(poi, settings);
       
-      // Generate the map using existing map generator (placeholder for now)
-      // TODO: Replace with actual map generation when mapGenerator is available
-      const mapData = this.generatePlaceholderMap(generationParams);
+      // Generate the map using AI generation service
+      const generationResult = await aiMapGenerationService.generateMap(prompt, options);
 
       // Check for abort after generation
       if (abortSignal.aborted) {
         throw new Error('Generation aborted');
       }
 
+      if (!generationResult.success || !generationResult.map) {
+        throw new Error(generationResult.message || 'Failed to generate map');
+      }
+
       return {
         poi,
-        mapData,
+        mapData: generationResult.map,
         generationTime: 0, // Will be calculated by caller
         success: true
       };
@@ -373,18 +378,95 @@ class CampaignMapGeneratorService {
   }
 
   /**
-   * Generate placeholder map data (temporary until mapGenerator is available)
+   * Convert POI to AI generation prompt
    */
-  private generatePlaceholderMap(params: any): any {
+  private poiToPrompt(poi: PointOfInterest): string {
+    const parts = [
+      `Create a D&D map for "${poi.name}"`,
+      `Description: ${poi.description}`,
+      `Type: ${poi.type}`,
+      `Difficulty: ${poi.difficultyRating}/10`
+    ];
+
+    if (poi.atmosphericDetails.mood) {
+      parts.push(`Mood: ${poi.atmosphericDetails.mood}`);
+    }
+
+    if (poi.mapRequirements.lightingConditions) {
+      parts.push(`Lighting: ${poi.mapRequirements.lightingConditions}`);
+    }
+
+    if (poi.npcs.length > 0) {
+      parts.push(`NPCs: ${poi.npcs.join(', ')}`);
+    }
+
+    if (poi.mapRequirements.requiredFeatures.length > 0) {
+      const featureTypes = poi.mapRequirements.requiredFeatures.map(f => f.type);
+      parts.push(`Required features: ${featureTypes.join(', ')}`);
+    }
+
+    // Convert terrain distribution object to readable format
+    const terrainTypes = Object.keys(poi.mapRequirements.terrainTypes);
+    if (terrainTypes.length > 0) {
+      parts.push(`Terrain types: ${terrainTypes.join(', ')}`);
+    }
+
+    return parts.join('. ');
+  }
+
+  /**
+   * Convert POI to AI generation options
+   */
+  private poiToAIOptions(poi: PointOfInterest, settings: CampaignSettings): AIGenerationOptions {
+    // Map POI type to AI style
+    let style: AIGenerationOptions['style'] = 'dungeon';
+    
+    switch (poi.type.toLowerCase()) {
+      case 'wilderness':
+      case 'forest':
+      case 'mountain':
+        style = 'wilderness';
+        break;
+      case 'city':
+      case 'town':
+      case 'village':
+        style = 'city';
+        break;
+      case 'tavern':
+      case 'inn':
+        style = 'tavern';
+        break;
+      case 'temple':
+      case 'shrine':
+      case 'church':
+        style = 'temple';
+        break;
+      default:
+        style = 'dungeon';
+    }
+
+    // Map settings to complexity
+    let complexity: AIGenerationOptions['complexity'] = 'moderate';
+    switch (settings.detailLevel) {
+      case 'basic':
+        complexity = 'simple';
+        break;
+      case 'detailed':
+        complexity = 'complex';
+        break;
+      default:
+        complexity = 'moderate';
+    }
+
     return {
-      name: params.name,
-      width: params.width,
-      height: params.height,
-      tiles: Array(params.width * params.height).fill({ type: 'floor' }),
-      metadata: {
-        generated: true,
-        timestamp: new Date().toISOString()
-      }
+      mapSize: {
+        width: poi.mapRequirements.dimensions.width,
+        height: poi.mapRequirements.dimensions.height
+      },
+      style,
+      complexity,
+      includeObjects: settings.detailLevel !== 'basic',
+      seed: `${poi.id}-${Date.now()}`
     };
   }
 
