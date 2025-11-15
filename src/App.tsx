@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { 
   ThemeProvider, 
   createTheme, 
@@ -21,7 +21,9 @@ import {
   Folder as FolderIcon,
   Add as AddIcon,
   Image as ImageIcon,
-  AutoAwesome as AutoAwesomeIcon
+  AutoAwesome as AutoAwesomeIcon,
+  Undo as UndoIcon,
+  Redo as RedoIcon
 } from '@mui/icons-material';
 import SimpleMapCanvas from './components/MapCanvas/SimpleMapCanvas';
 import MapToolbar from './components/Toolbar/Toolbar';
@@ -31,7 +33,6 @@ import { AIGenerationDialog } from './components/AIGeneration';
 import { 
   DnDMap, 
   ViewportState, 
-  Position, 
   ToolState, 
   ToolType, 
   TerrainType 
@@ -40,6 +41,7 @@ import { createNewMap } from './utils/mapUtils';
 import { DEFAULT_MAP_DIMENSIONS } from './utils/constants';
 import { useAutoSave } from './hooks/useAutoSave';
 import { fileService } from './services/fileService';
+import { mapEditingService } from './services/mapEditingService';
 
 // Create Material-UI theme
 const theme = createTheme({
@@ -79,7 +81,7 @@ function App() {
     selectedLayer: currentMap.layers[1].id // Terrain layer
   });
 
-  const [selectedTiles, setSelectedTiles] = useState<Position[]>([]);
+  const [selectedObjects, setSelectedObjects] = useState<string[]>([]);
   const [fileManagerOpen, setFileManagerOpen] = useState(false);
   const [imageExportOpen, setImageExportOpen] = useState(false);
   const [aiGenerationOpen, setAiGenerationOpen] = useState(false);
@@ -123,20 +125,7 @@ function App() {
     setViewportState(newViewport);
   }, []);
 
-  // Handle tile clicks
-  const handleTileClick = useCallback((position: Position) => {
-    console.log('Tile clicked:', position);
-    // TODO: Implement tile editing based on current tool
-    
-    // For now, just select the tile
-    setSelectedTiles([position]);
-  }, []);
 
-  // Handle tile hover
-  const handleTileHover = useCallback((position: Position | null) => {
-    console.log('Tile hovered:', position);
-    // TODO: Implement hover effects
-  }, []);
 
   // Handle tool changes
   const handleToolChange = useCallback((tool: ToolType) => {
@@ -198,6 +187,70 @@ function App() {
     showNotification(`AI generated map: ${map.metadata.name}`, 'success');
   }, [showNotification]);
 
+  // Map editing handlers
+  const handleMapChange = useCallback((map: DnDMap) => {
+    setCurrentMap(map);
+    setIsDirty(true);
+  }, []);
+
+  const handleObjectSelection = useCallback((objectIds: string[]) => {
+    setSelectedObjects(objectIds);
+  }, []);
+
+  // Undo/Redo handlers
+  const handleUndo = useCallback(() => {
+    const result = mapEditingService.undo(currentMap);
+    if (result.success) {
+      setCurrentMap(result.updatedMap);
+      setIsDirty(true);
+      showNotification('Undid last action', 'info');
+    }
+  }, [currentMap, showNotification]);
+
+  const handleRedo = useCallback(() => {
+    const result = mapEditingService.redo(currentMap);
+    if (result.success) {
+      setCurrentMap(result.updatedMap);
+      setIsDirty(true);
+      showNotification('Redid last action', 'info');
+    }
+  }, [currentMap, showNotification]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey) {
+        switch (event.key) {
+          case 'z':
+            if (event.shiftKey) {
+              event.preventDefault();
+              handleRedo();
+            } else {
+              event.preventDefault();
+              handleUndo();
+            }
+            break;
+          case 'y':
+            event.preventDefault();
+            handleRedo();
+            break;
+          case 's':
+            event.preventDefault();
+            fileService.saveMapToStorage(currentMap);
+            showNotification('Map saved', 'success');
+            break;
+          case 'n':
+            event.preventDefault();
+            handleNewMap();
+            break;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleUndo, handleRedo, currentMap, showNotification, handleNewMap]);
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -256,6 +309,21 @@ function App() {
             Open Map...
           </MenuItem>
           <Divider />
+          <MenuItem 
+            onClick={() => { handleUndo(); handleMenuClose(); }}
+            disabled={!mapEditingService.canUndo()}
+          >
+            <UndoIcon sx={{ mr: 1 }} />
+            Undo (Ctrl+Z)
+          </MenuItem>
+          <MenuItem 
+            onClick={() => { handleRedo(); handleMenuClose(); }}
+            disabled={!mapEditingService.canRedo()}
+          >
+            <RedoIcon sx={{ mr: 1 }} />
+            Redo (Ctrl+Y)
+          </MenuItem>
+          <Divider />
           <MenuItem onClick={() => { 
             fileService.saveMapToStorage(currentMap);
             showNotification('Map saved', 'success');
@@ -288,35 +356,106 @@ function App() {
           {/* Map Canvas */}
           <Box sx={{ flex: 1, position: 'relative' }}>
             <SimpleMapCanvas
+              map={currentMap}
+              onMapChange={handleMapChange}
               width={800}
               height={600}
+              viewport={viewportState}
+              onViewportChange={handleViewportChange}
+              toolState={toolState}
+              selectedObjects={selectedObjects}
+              onObjectSelection={handleObjectSelection}
+              showGrid={true}
+              gridSize={32}
             />
           </Box>
 
-          {/* Side Panel - TODO: Implement in next phase */}
+          {/* Properties Panel */}
           <Box 
             sx={{ 
               width: 300, 
               backgroundColor: 'background.paper',
               borderLeft: 1,
               borderColor: 'divider',
-              p: 2
+              p: 2,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 2
             }}
           >
             <Typography variant="h6" gutterBottom>
-              Properties
+              Map Properties
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Map: {currentMap.dimensions.width} × {currentMap.dimensions.height}
+              Size: {currentMap.dimensions.width} × {currentMap.dimensions.height}
             </Typography>
             <Typography variant="body2" color="text.secondary">
               Zoom: {Math.round(viewportState.zoom * 100)}%
             </Typography>
-            {selectedTiles.length > 0 && (
-              <Typography variant="body2" color="text.secondary">
-                Selected: ({selectedTiles[0].x}, {selectedTiles[0].y})
-              </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Tool: {toolState.activeTool}
+            </Typography>
+            
+            {selectedObjects.length > 0 && (
+              <Box>
+                <Typography variant="h6" gutterBottom>
+                  Selected Objects
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {selectedObjects.length} object(s) selected
+                </Typography>
+                <Button 
+                  size="small" 
+                  color="error"
+                  onClick={() => {
+                    selectedObjects.forEach(id => {
+                      const result = mapEditingService.deleteObject(currentMap, id);
+                      if (result.success) {
+                        setCurrentMap(result.updatedMap);
+                        setIsDirty(true);
+                      }
+                    });
+                    setSelectedObjects([]);
+                    showNotification('Deleted selected objects', 'info');
+                  }}
+                  sx={{ mt: 1 }}
+                >
+                  Delete Selected
+                </Button>
+              </Box>
             )}
+
+            <Box>
+              <Typography variant="h6" gutterBottom>
+                Quick Actions
+              </Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={handleUndo}
+                  disabled={!mapEditingService.canUndo()}
+                  startIcon={<UndoIcon />}
+                >
+                  Undo
+                </Button>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={handleRedo}
+                  disabled={!mapEditingService.canRedo()}
+                  startIcon={<RedoIcon />}
+                >
+                  Redo
+                </Button>
+              </Box>
+            </Box>
+
+            <Box>
+              <Typography variant="body2" color="text.secondary">
+                History: {mapEditingService.getHistoryInfo().undoCount} undos, {mapEditingService.getHistoryInfo().redoCount} redos
+              </Typography>
+            </Box>
           </Box>
         </Box>
 
