@@ -29,7 +29,8 @@ import {
   Collections as AssetsIcon,
   GridOn as GridIcon,
   Straighten as RulerIcon,
-  Help as HelpIcon
+  Help as HelpIcon,
+  Campaign as CampaignIcon
 } from '@mui/icons-material';
 import SimpleMapCanvas from './components/MapCanvas/SimpleMapCanvas';
 import MapToolbar from './components/Toolbar/Toolbar';
@@ -43,6 +44,7 @@ import MeasurementTools from './components/MeasurementTools';
 import KeyboardShortcuts from './components/KeyboardShortcuts';
 import WorkspaceManager from './components/WorkspaceManager/WorkspaceManager';
 import WorkspaceNavigation from './components/WorkspaceNavigation/WorkspaceNavigation';
+import CampaignBuilderDialog from './components/CampaignBuilder/CampaignBuilderDialog';
 import { 
   DnDMap, 
   ViewportState, 
@@ -113,6 +115,7 @@ function App() {
   const [measurementPoints, setMeasurementPoints] = useState<any[]>([]);
   const [measurementLines, setMeasurementLines] = useState<any[]>([]);
   const [keyboardShortcutsOpen, setKeyboardShortcutsOpen] = useState(false);
+  const [campaignBuilderOpen, setCampaignBuilderOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [notification, setNotification] = useState<{
@@ -213,6 +216,26 @@ function App() {
     setCurrentMap(map);
     setIsDirty(false);
     showNotification(`AI generated map: ${map.metadata.name}`, 'success');
+  }, [showNotification]);
+
+  // Campaign builder handler
+  const handleCampaignGenerated = useCallback((workspace: any) => {
+    // If workspace is provided, load it
+    if (workspace) {
+      setCurrentWorkspace(workspace);
+      
+      // Load the first map if available
+      if (workspace.maps && workspace.maps.length > 0) {
+        const firstMap = workspace.maps[0];
+        setCurrentMap(firstMap.mapData);
+        setSelectedMapId(firstMap.id);
+        setIsDirty(false);
+      }
+      
+      showNotification(`Campaign workspace created: ${workspace.metadata.name}`, 'success');
+    }
+    
+    setCampaignBuilderOpen(false);
   }, [showNotification]);
 
   // Map editing handlers
@@ -422,6 +445,10 @@ function App() {
             event.preventDefault();
             setAiGenerationOpen(true);
             break;
+          case 'k':
+            event.preventDefault();
+            setCampaignBuilderOpen(true);
+            break;
           case '?':
           case '/':
             event.preventDefault();
@@ -477,6 +504,7 @@ function App() {
             setFileManagerOpen(false);
             setImageExportOpen(false);
             setAiGenerationOpen(false);
+            setCampaignBuilderOpen(false);
             setLayerPanelOpen(false);
             setAssetBrowserOpen(false);
             setGridSettingsOpen(false);
@@ -551,6 +579,14 @@ function App() {
               sx={{ mr: 1 }}
             >
               AI Generate
+            </Button>
+            <Button
+              color="inherit"
+              startIcon={<CampaignIcon />}
+              onClick={() => setCampaignBuilderOpen(true)}
+              sx={{ mr: 1 }}
+            >
+              Campaign Builder
             </Button>
             <IconButton
               color="inherit"
@@ -635,6 +671,10 @@ function App() {
           <MenuItem onClick={() => { setAiGenerationOpen(true); handleMenuClose(); }}>
             <AutoAwesomeIcon sx={{ mr: 1 }} />
             Generate with AI...
+          </MenuItem>
+          <MenuItem onClick={() => { setCampaignBuilderOpen(true); handleMenuClose(); }}>
+            <CampaignIcon sx={{ mr: 1 }} />
+            Campaign Builder...
           </MenuItem>
           <MenuItem onClick={() => { setFileManagerOpen(true); handleMenuClose(); }}>
             <FolderIcon sx={{ mr: 1 }} />
@@ -846,6 +886,13 @@ function App() {
           open={aiGenerationOpen}
           onClose={() => setAiGenerationOpen(false)}
           onMapGenerated={handleAiMapGenerated}
+        />
+
+        {/* Campaign Builder Dialog */}
+        <CampaignBuilderDialog
+          open={campaignBuilderOpen}
+          onClose={() => setCampaignBuilderOpen(false)}
+          onCampaignGenerated={handleCampaignGenerated}
         />
 
         {/* Asset Browser */}
