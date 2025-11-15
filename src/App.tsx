@@ -33,6 +33,7 @@ import {
   Campaign as CampaignIcon
 } from '@mui/icons-material';
 import SimpleMapCanvas from './components/MapCanvas/SimpleMapCanvas';
+import MapLegend from './components/MapLegend';
 import MapToolbar from './components/Toolbar/Toolbar';
 import FileManager from './components/FileManager/FileManager';
 import ImageExportDialog from './components/ImageExport/ImageExportDialog';
@@ -48,7 +49,7 @@ import CampaignBuilderDialog from './components/CampaignBuilder/CampaignBuilderD
 import { 
   DnDMap, 
   ViewportState, 
-  ToolState, 
+  ToolState,
   ToolType, 
   TerrainType 
 } from './types/map';
@@ -249,6 +250,41 @@ function App() {
     
     setCampaignBuilderOpen(false);
   }, [showNotification]);
+
+  // Helper functions for map legend
+  const getVisibleTerrainTypes = useCallback((map: DnDMap): TerrainType[] => {
+    const terrainTypes = new Set<TerrainType>();
+    
+    // Extract terrain types from all terrain layers
+    map.layers.forEach(layer => {
+      if (layer.type === 'terrain' && layer.isVisible) {
+        layer.tiles?.forEach(tile => {
+          if (tile.terrainType) {
+            terrainTypes.add(tile.terrainType);
+          }
+        });
+      }
+    });
+    
+    return Array.from(terrainTypes);
+  }, []);
+
+  const getMapEnvironmentType = useCallback((map: DnDMap): string => {
+    // Check tags first for explicit environment type
+    const tags = map.metadata.tags || [];
+    const environmentTags = ['dungeon', 'forest', 'tavern', 'home', 'temple', 'city'];
+    for (const tag of tags) {
+      if (environmentTags.includes(tag.toLowerCase())) {
+        return tag.toLowerCase();
+      }
+    }
+    
+    // Fallback: analyze terrain types to guess environment
+    const terrainTypes = getVisibleTerrainTypes(map);
+    if (terrainTypes.includes(TerrainType.DIFFICULT_TERRAIN)) return 'forest';
+    if (terrainTypes.includes(TerrainType.WALL) && terrainTypes.includes(TerrainType.FLOOR)) return 'dungeon';
+    return 'dungeon'; // default
+  }, [getVisibleTerrainTypes]);
 
   // Map editing handlers
   const handleMapChange = useCallback((map: DnDMap) => {
@@ -788,6 +824,23 @@ function App() {
               showGrid={true}
               gridSize={32}
             />
+            
+            {/* Map Legend Overlay */}
+            {currentMap && (
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: 16,
+                  right: 16,
+                  zIndex: 1000,
+                }}
+              >
+                <MapLegend
+                  environmentType={getMapEnvironmentType(currentMap)}
+                  visibleTerrainTypes={getVisibleTerrainTypes(currentMap)}
+                />
+              </Box>
+            )}
           </Box>
 
           {/* Properties Panel */}
