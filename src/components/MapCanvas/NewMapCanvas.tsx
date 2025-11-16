@@ -227,20 +227,22 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
           
           // Check if this is an L-shaped corridor
           if (obj.properties?.isLShaped && obj.properties?.corridorPoints) {
-            // Render L-shaped corridor as individual cells
-            const pathWidth = obj.properties.width || 2;
+            // Render L-shaped corridor as individual cells with organic variation
+            const defaultPathWidth = obj.properties.width || 2;
             const corridorRects: JSX.Element[] = [];
             
-            obj.properties.corridorPoints.forEach((point: { x: number; y: number }, idx: number) => {
+            obj.properties.corridorPoints.forEach((point: { x: number; y: number; width?: number }, idx: number) => {
+              const cellWidth = (point.width || defaultPathWidth) * gridSize;
               corridorRects.push(
                 <Rect
                   key={`${obj.id}-corridor-${idx}`}
                   x={point.x * gridSize}
                   y={point.y * gridSize}
-                  width={pathWidth * gridSize}
-                  height={pathWidth * gridSize}
+                  width={cellWidth}
+                  height={cellWidth}
                   fill={fillColor}
                   listening={false}
+                  cornerRadius={gridSize * 0.1} // Slight rounding for organic feel
                 />
               );
             });

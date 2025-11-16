@@ -815,39 +815,67 @@ export class MapGenerationService {
     const pathWidth = options.terrainType === MapTerrainType.FOREST ? 1 : 
                      options.terrainType === MapTerrainType.CAVE ? 2 + Math.floor(this.random() * 2) : 2;
     
-    // Create L-shaped corridor with path segments
-    // Store the corridor as a series of points for proper rendering
-    const corridorPoints: Position[] = [];
+    // Create organic-looking corridor with natural variation
+    // Store the corridor as a series of points with width variation
+    const corridorPoints: (Position & { width?: number })[] = [];
     
     // Decide whether to go horizontal-first or vertical-first
     const horizontalFirst = this.random() > 0.5;
     
+    // Add wandering/organic feel with occasional offsets
+    const createOrganicPath = (fromX: number, fromY: number, toX: number, toY: number, isHorizontal: boolean) => {
+      const points: (Position & { width?: number })[] = [];
+      
+      if (isHorizontal) {
+        const minX = Math.min(fromX, toX);
+        const maxX = Math.max(fromX, toX);
+        let currentY = fromY;
+        
+        for (let x = minX; x <= maxX; x++) {
+          // Add slight vertical wandering for organic feel (30% chance every few cells)
+          if (x > minX && x < maxX - 1 && this.random() < 0.3 && (x - minX) % 3 === 0) {
+            currentY += this.random() < 0.5 ? 1 : -1;
+          }
+          
+          // Vary width slightly for natural look
+          const widthVariation = this.random() < 0.2 ? (this.random() < 0.5 ? 1 : -1) : 0;
+          points.push({ 
+            x, 
+            y: currentY,
+            width: Math.max(1, pathWidth + widthVariation)
+          });
+        }
+      } else {
+        const minY = Math.min(fromY, toY);
+        const maxY = Math.max(fromY, toY);
+        let currentX = fromX;
+        
+        for (let y = minY; y <= maxY; y++) {
+          // Add slight horizontal wandering for organic feel
+          if (y > minY && y < maxY - 1 && this.random() < 0.3 && (y - minY) % 3 === 0) {
+            currentX += this.random() < 0.5 ? 1 : -1;
+          }
+          
+          const widthVariation = this.random() < 0.2 ? (this.random() < 0.5 ? 1 : -1) : 0;
+          points.push({ 
+            x: currentX, 
+            y,
+            width: Math.max(1, pathWidth + widthVariation)
+          });
+        }
+      }
+      
+      return points;
+    };
+    
     if (horizontalFirst) {
-      // Horizontal segment
-      const minX = Math.min(startX, endX);
-      const maxX = Math.max(startX, endX);
-      for (let x = minX; x <= maxX; x++) {
-        corridorPoints.push({ x, y: startY });
-      }
-      // Vertical segment
-      const minY = Math.min(startY, endY);
-      const maxY = Math.max(startY, endY);
-      for (let y = minY; y <= maxY; y++) {
-        corridorPoints.push({ x: endX, y });
-      }
+      // Horizontal segment then vertical
+      corridorPoints.push(...createOrganicPath(startX, startY, endX, startY, true));
+      corridorPoints.push(...createOrganicPath(endX, startY, endX, endY, false));
     } else {
-      // Vertical segment
-      const minY = Math.min(startY, endY);
-      const maxY = Math.max(startY, endY);
-      for (let y = minY; y <= maxY; y++) {
-        corridorPoints.push({ x: startX, y });
-      }
-      // Horizontal segment
-      const minX = Math.min(startX, endX);
-      const maxX = Math.max(startX, endX);
-      for (let x = minX; x <= maxX; x++) {
-        corridorPoints.push({ x, y: endY });
-      }
+      // Vertical segment then horizontal
+      corridorPoints.push(...createOrganicPath(startX, startY, startX, endY, false));
+      corridorPoints.push(...createOrganicPath(startX, endY, endX, endY, true));
     }
     
     return {
