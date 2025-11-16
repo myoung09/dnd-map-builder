@@ -1,1 +1,1 @@
-export { default } from './SimpleMapCanvas';
+export { default } from './NewMapCanvas';

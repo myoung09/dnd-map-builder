@@ -33,7 +33,7 @@ import {
   Campaign as CampaignIcon,
   Map as MapIcon
 } from '@mui/icons-material';
-import SimpleMapCanvas from './components/MapCanvas/SimpleMapCanvas';
+import NewMapCanvas from './components/MapCanvas/NewMapCanvas';
 import MapLegend from './components/MapLegend';
 import MapToolbar from './components/Toolbar/Toolbar';
 import FileManager from './components/FileManager/FileManager';
@@ -61,7 +61,7 @@ import { useAutoSave } from './hooks/useAutoSave';
 import { fileService } from './services/fileService';
 import { mapEditingService } from './services/mapEditingService';
 import workspaceService from './services/workspaceService';
-import { mapGenerationService, MapGenerationOptions } from './services/mapGenerationService';
+import { mapGenerationService, MapGenerationOptions, MapTerrainType } from './services/mapGenerationService';
 
 // Create Material-UI theme
 const theme = createTheme({
@@ -166,9 +166,7 @@ function App() {
     setToolState(prev => ({ ...prev, activeTool: tool }));
   }, []);
 
-  const handleBrushSizeChange = useCallback((size: number) => {
-    setToolState(prev => ({ ...prev, brushSize: size }));
-  }, []);
+
 
   const handleTerrainTypeChange = useCallback((terrainType: TerrainType) => {
     setToolState(prev => ({ ...prev, selectedTerrainType: terrainType }));
@@ -258,11 +256,12 @@ function App() {
     const options: MapGenerationOptions = {
       width: 40,
       height: 30,
+      terrainType: MapTerrainType.DUNGEON,
       numberOfRooms: 6,
       minRoomSize: 4,
       maxRoomSize: 8,
-      corridorWidth: 2,
-      organicFactor: 0.7
+      organicFactor: 0.7,
+      objectDensity: 0.5
     };
 
     try {
@@ -554,29 +553,25 @@ function App() {
       // Single key shortcuts (no modifier)
       else {
         switch (event.key) {
-          case 'b':
-            event.preventDefault();
-            handleToolChange(ToolType.BRUSH);
-            break;
-          case 'e':
-            event.preventDefault();
-            handleToolChange(ToolType.ERASER);
-            break;
-          case 's':
+          case 'v':
             event.preventDefault();
             handleToolChange(ToolType.SELECT);
-            break;
-          case 'r':
-            event.preventDefault();
-            handleToolChange(ToolType.RECTANGLE);
-            break;
-          case 'c':
-            event.preventDefault();
-            handleToolChange(ToolType.CIRCLE);
             break;
           case 'o':
             event.preventDefault();
             handleToolChange(ToolType.OBJECT_PLACE);
+            break;
+          case 't':
+            event.preventDefault();
+            handleToolChange(ToolType.TEXT);
+            break;
+          case 'z':
+            event.preventDefault();
+            handleToolChange(ToolType.ZOOM);
+            break;
+          case 'h':
+            event.preventDefault();
+            handleToolChange(ToolType.PAN);
             break;
           case 'g':
             event.preventDefault();
@@ -605,20 +600,34 @@ function App() {
             setMeasurementToolActive(false);
             setKeyboardShortcutsOpen(false);
             break;
-          // Number keys for brush size
+          // Number keys reserved for future features
           case '1':
           case '2':
           case '3':
           case '4':
           case '5':
-          case '6':
-          case '7':
-          case '8':
-          case '9':
             event.preventDefault();
-            const size = parseInt(event.key);
-            handleBrushSizeChange(size);
-            showNotification(`Brush size: ${size}`, 'info');
+            const terrainTypes = [MapTerrainType.HOUSE, MapTerrainType.FOREST, MapTerrainType.CAVE, MapTerrainType.TOWN, MapTerrainType.DUNGEON];
+            const selectedIndex = parseInt(event.key) - 1;
+            if (selectedIndex < terrainTypes.length) {
+              const newOptions = {
+                width: 40,
+                height: 30,
+                terrainType: terrainTypes[selectedIndex],
+                numberOfRooms: 6,
+                minRoomSize: 4,
+                maxRoomSize: 8,
+                organicFactor: 0.7,
+                objectDensity: 0.5
+              };
+              try {
+                const generatedMap = mapGenerationService.generateLayeredMap(newOptions);
+                setCurrentMap(generatedMap);
+                showNotification(`Generated ${terrainTypes[selectedIndex]} map`, 'success');
+              } catch (error) {
+                showNotification('Failed to generate map', 'error');
+              }
+            }
             break;
         }
       }
@@ -633,7 +642,6 @@ function App() {
     showNotification, 
     handleNewMap, 
     handleToolChange,
-    handleBrushSizeChange,
     handleMeasurementToggle,
     setIsDirty
   ]);
@@ -840,8 +848,6 @@ function App() {
           <MapToolbar
             activeTool={toolState.activeTool}
             onToolChange={handleToolChange}
-            brushSize={toolState.brushSize}
-            onBrushSizeChange={handleBrushSizeChange}
             selectedTerrainType={toolState.selectedTerrainType}
             onTerrainTypeChange={handleTerrainTypeChange}
             selectedColor={toolState.selectedColor}
@@ -863,7 +869,7 @@ function App() {
 
           {/* Map Canvas */}
           <Box sx={{ flex: 1, position: 'relative' }}>
-            <SimpleMapCanvas
+            <NewMapCanvas
               map={currentMap}
               onMapChange={handleMapChange}
               width={800}
@@ -895,7 +901,7 @@ function App() {
             )}
           </Box>
 
-          {/* Properties Panel */}
+          {/* Map Generation Panel */}
           <Box 
             sx={{ 
               width: 300, 
@@ -909,21 +915,60 @@ function App() {
             }}
           >
             <Typography variant="h6" gutterBottom>
-              Map Properties
+              Map Generator
             </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Size: {currentMap.dimensions.width} × {currentMap.dimensions.height}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Zoom: {Math.round(viewportState.zoom * 100)}%
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Tool: {toolState.activeTool}
-            </Typography>
+            
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>
+                Current Map
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {currentMap.metadata.name}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Size: {currentMap.dimensions.width} × {currentMap.dimensions.height}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Layers: {currentMap.layers.length}
+              </Typography>
+            </Box>
+
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>
+                Generation Options
+              </Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={handleGenerateMap}
+                  startIcon={<MapIcon />}
+                  fullWidth
+                >
+                  Generate New Map
+                </Button>
+                <Button
+                  variant="outlined"
+                  onClick={() => setCampaignBuilderOpen(true)}
+                  startIcon={<CampaignIcon />}
+                  fullWidth
+                >
+                  Campaign Builder
+                </Button>
+                <Button
+                  variant="outlined"
+                  onClick={() => setAiGenerationOpen(true)}
+                  startIcon={<AutoAwesomeIcon />}
+                  fullWidth
+                >
+                  AI Generate
+                </Button>
+              </Box>
+            </Box>
             
             {selectedObjects.length > 0 && (
               <Box>
-                <Typography variant="h6" gutterBottom>
+                <Typography variant="subtitle2" gutterBottom>
                   Selected Objects
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
@@ -951,10 +996,16 @@ function App() {
             )}
 
             <Box>
-              <Typography variant="h6" gutterBottom>
-                Quick Actions
+              <Typography variant="subtitle2" gutterBottom>
+                View Controls
               </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Typography variant="body2" color="text.secondary">
+                Zoom: {Math.round(viewportState.zoom * 100)}%
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Tool: {toolState.activeTool.replace('_', ' ')}
+              </Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 1 }}>
                 <Button
                   size="small"
                   variant="outlined"
@@ -1100,10 +1151,10 @@ function App() {
               Ready
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Tool: {toolState.activeTool}
+              Tool: {toolState.activeTool.replace('_', ' ')}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Brush: {toolState.brushSize}px
+              Mode: Shape-based generation
             </Typography>
             <Typography variant="body2" color="text.secondary">
               Layers: {currentMap.layers.length}
@@ -1128,7 +1179,7 @@ function App() {
               </Typography>
             )}
             <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
-              Press ? for shortcuts
+              Press 1-5 for terrain types • ? for shortcuts
             </Typography>
           </Box>
         </Box>

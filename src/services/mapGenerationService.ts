@@ -1,33 +1,75 @@
 import { v4 as uuidv4 } from 'uuid';
-import { DnDMap, LayerType, MapLayer, MapTile, Position, TerrainType } from '../types/map';
+import { DnDMap, LayerType, MapLayer, MapObject, Position, Color, ObjectType } from '../types/map';
+
+// Terrain types for map generation
+export enum MapTerrainType {
+  HOUSE = 'house',
+  FOREST = 'forest', 
+  CAVE = 'cave',
+  TOWN = 'town',
+  DUNGEON = 'dungeon'
+}
 
 export interface MapGenerationOptions {
   width: number;
   height: number;
+  terrainType: MapTerrainType;
   numberOfRooms: number;
   minRoomSize: number;
   maxRoomSize: number;
-  corridorWidth: number;
-  organicFactor: number;
+  organicFactor: number; // 0.0 = geometric, 1.0 = very organic
+  objectDensity: number; // 0.0 = sparse, 1.0 = dense
 }
 
-interface SimpleRoom {
-  id: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
+// Coordinated color themes for terrain types
+interface TerrainColorTheme {
+  name: string;
+  backgroundColor: Color;
+  pathColor: Color;
+  roomAccentColor?: Color;
+  contrastRatio: number;
 }
 
-interface SimplePath {
+interface TerrainObjectSet {
+  terrain: MapTerrainType;
+  commonObjects: ObjectIcon[];
+  rareObjects: ObjectIcon[];
+  decorativeObjects: ObjectIcon[];
+}
+
+interface ObjectIcon {
+  emoji: string;
+  type: ObjectType;
+  probability: number;
+  roomTypes?: string[];
+  size: { width: number; height: number };
+}
+
+// Room/space definitions  
+interface GeneratedRoom {
   id: string;
-  startRoom: string;
-  endRoom: string;
-  points: Position[];
+  type: string; // 'bedroom', 'clearing', 'cavern', 'building_plot'
+  shape: RoomShape;
+  position: Position;
+  size: { width: number; height: number };
+  color?: Color;
+}
+
+interface RoomShape {
+  type: 'rectangle' | 'circle' | 'organic' | 'polygon';
+  points?: Position[]; // For organic/polygon shapes
+  radius?: number; // For circles
 }
 
 export class MapGenerationService {
   private seed: number = Math.random();
+  private terrainColorSets: Map<MapTerrainType, TerrainColorTheme[]> = new Map();
+  private terrainObjectSets: Map<MapTerrainType, TerrainObjectSet> = new Map();
+
+  constructor() {
+    this.initializeTerrainColorSets();
+    this.initializeTerrainObjectSets();
+  }
 
   setSeed(seed: number) {
     this.seed = seed;
@@ -43,46 +85,29 @@ export class MapGenerationService {
     // Set a random seed for reproducible generation
     this.setSeed(Math.random() * 1000000);
 
-    // Generate simple rooms first
-    const rooms = this.generateSimpleRooms(options);
+    // Select coordinated color theme for this terrain
+    const colorTheme = this.selectColorTheme(options.terrainType);
     
-    // Generate simple paths between rooms
-    const paths = this.generateSimplePaths(rooms, options);
+    // Generate rooms based on terrain type
+    const rooms = this.generateRoomsByTerrain(options);
     
-    // Create the main terrain layer
-    const terrainLayer = this.createSimpleTerrainLayer(rooms, paths, options);
-
-    // Create background layer (just empty for now)
-    const backgroundLayer: MapLayer = {
-      id: uuidv4(),
-      name: 'Background',
-      type: LayerType.BACKGROUND,
-      tiles: [],
-      isVisible: true,
-      isLocked: false,
-      opacity: 1
-    };
-
-    // Create objects layer (empty for now)
-    const objectsLayer: MapLayer = {
-      id: uuidv4(),
-      name: 'Objects',
-      type: LayerType.OBJECTS,
-      tiles: [],
-      isVisible: true,
-      isLocked: false,
-      opacity: 1
-    };
+    // Create the 5 layers: Background → Rooms → Paths → Grid → Objects
+    const backgroundLayer = this.createBackgroundLayer(colorTheme);
+    const roomLayer = this.createRoomLayer(rooms, colorTheme);
+    const pathLayer = this.createPathLayer(rooms, options, colorTheme);
+    const objectsLayer = this.createObjectsLayer(rooms, options);
 
     const mapId = uuidv4();
+    const mapName = this.generateMapName(options.terrainType);
 
     return {
       metadata: {
         id: mapId,
-        name: 'Generated Dungeon',
+        name: mapName,
         createdAt: new Date(),
         updatedAt: new Date(),
-        version: '1.0'
+        version: '1.0',
+        tags: [options.terrainType]
       },
       dimensions: {
         width: options.width,
@@ -91,20 +116,262 @@ export class MapGenerationService {
       gridConfig: {
         cellSize: 32,
         showGrid: true,
-        gridColor: { r: 200, g: 200, b: 200, a: 0.5 },
+        gridColor: { r: 200, g: 200, b: 200, a: 0.3 },
         snapToGrid: true,
         gridType: 'square'
       },
-      layers: [backgroundLayer, terrainLayer, objectsLayer],
-      backgroundColor: { r: 50, g: 50, b: 50 }
+      layers: [backgroundLayer, roomLayer, pathLayer, objectsLayer],
+      backgroundColor: colorTheme.backgroundColor
     };
   }
 
-  // Generate simple rectangular rooms
-  private generateSimpleRooms(options: MapGenerationOptions): SimpleRoom[] {
-    const rooms: SimpleRoom[] = [];
-    const { width, height, numberOfRooms, minRoomSize, maxRoomSize } = options;
+  // Initialize coordinated color themes for each terrain type
+  private initializeTerrainColorSets(): void {
+    // HOUSE terrain themes
+    this.terrainColorSets.set(MapTerrainType.HOUSE, [
+      {
+        name: 'Warm Wood & Dark Halls',
+        backgroundColor: { r: 222, g: 184, b: 135 }, // burlywood
+        pathColor: { r: 101, g: 67, b: 33 }, // dark brown
+        contrastRatio: 4.5
+      },
+      {
+        name: 'Stone & Slate',
+        backgroundColor: { r: 105, g: 105, b: 105 }, // dim gray
+        pathColor: { r: 47, g: 79, b: 79 }, // dark slate gray
+        contrastRatio: 3.2
+      },
+      {
+        name: 'Rich Wood & Light Stone',
+        backgroundColor: { r: 139, g: 69, b: 19 }, // saddle brown
+        pathColor: { r: 119, g: 136, b: 153 }, // light slate gray
+        contrastRatio: 5.1
+      }
+    ]);
 
+    // FOREST terrain themes
+    this.terrainColorSets.set(MapTerrainType.FOREST, [
+      {
+        name: 'Deep Forest & Earth Trails',
+        backgroundColor: { r: 34, g: 139, b: 34 }, // forest green
+        pathColor: { r: 139, g: 115, b: 85 }, // burlywood4
+        contrastRatio: 3.8
+      },
+      {
+        name: 'Olive Grove & Peru Paths',
+        backgroundColor: { r: 85, g: 107, b: 47 }, // dark olive green
+        pathColor: { r: 205, g: 133, b: 63 }, // peru
+        contrastRatio: 4.2
+      },
+      {
+        name: 'Meadow & Brown Trails',
+        backgroundColor: { r: 107, g: 142, b: 35 }, // olive drab
+        pathColor: { r: 93, g: 78, b: 55 }, // dark brown
+        contrastRatio: 3.5
+      }
+    ]);
+
+    // CAVE terrain themes
+    this.terrainColorSets.set(MapTerrainType.CAVE, [
+      {
+        name: 'Dark Stone & Slate',
+        backgroundColor: { r: 47, g: 47, b: 47 }, // dark gray
+        pathColor: { r: 112, g: 128, b: 144 }, // slate gray
+        contrastRatio: 4.1
+      },
+      {
+        name: 'Deep Cave & Steel Blue',
+        backgroundColor: { r: 28, g: 28, b: 28 }, // very dark
+        pathColor: { r: 70, g: 130, b: 180 }, // steel blue
+        contrastRatio: 6.2
+      },
+      {
+        name: 'Charcoal & Light Steel',
+        backgroundColor: { r: 54, g: 69, b: 79 }, // charcoal
+        pathColor: { r: 176, g: 196, b: 222 }, // light steel blue
+        contrastRatio: 5.8
+      }
+    ]);
+
+    // TOWN terrain themes  
+    this.terrainColorSets.set(MapTerrainType.TOWN, [
+      {
+        name: 'Green Commons & Tan Streets',
+        backgroundColor: { r: 143, g: 188, b: 143 }, // dark sea green
+        pathColor: { r: 210, g: 180, b: 140 }, // tan
+        contrastRatio: 3.1
+      },
+      {
+        name: 'Forest Green & Wheat Stone',
+        backgroundColor: { r: 34, g: 139, b: 34 }, // forest green
+        pathColor: { r: 245, g: 222, b: 179 }, // wheat
+        contrastRatio: 4.9
+      },
+      {
+        name: 'Lime Green & Sienna Brick',
+        backgroundColor: { r: 50, g: 205, b: 50 }, // lime green
+        pathColor: { r: 160, g: 82, b: 45 }, // sienna
+        contrastRatio: 3.7
+      }
+    ]);
+
+    // DUNGEON inherits from other terrain types (implemented in selectColorTheme)
+  }
+
+  // Initialize object sets for each terrain type
+  private initializeTerrainObjectSets(): void {
+    // HOUSE objects
+    this.terrainObjectSets.set(MapTerrainType.HOUSE, {
+      terrain: MapTerrainType.HOUSE,
+      commonObjects: [
+        { emoji: '🪑', type: ObjectType.FURNITURE, probability: 0.7, size: { width: 1, height: 1 } },
+        { emoji: '🚪', type: ObjectType.INTERACTIVE, probability: 0.4, size: { width: 1, height: 1 } },
+        { emoji: '🛏️', type: ObjectType.FURNITURE, probability: 0.5, roomTypes: ['bedroom'], size: { width: 2, height: 1 } }
+      ],
+      rareObjects: [
+        { emoji: '📚', type: ObjectType.DECORATION, probability: 0.2, roomTypes: ['study', 'library'], size: { width: 1, height: 1 } },
+        { emoji: '🍽️', type: ObjectType.FURNITURE, probability: 0.3, roomTypes: ['kitchen', 'dining'], size: { width: 1, height: 1 } }
+      ],
+      decorativeObjects: [
+        { emoji: '🕯️', type: ObjectType.LIGHT_SOURCE, probability: 0.4, size: { width: 1, height: 1 } }
+      ]
+    });
+
+    // FOREST objects
+    this.terrainObjectSets.set(MapTerrainType.FOREST, {
+      terrain: MapTerrainType.FOREST,
+      commonObjects: [
+        { emoji: '🌲', type: ObjectType.DECORATION, probability: 0.8, size: { width: 1, height: 1 } },
+        { emoji: '🪨', type: ObjectType.DECORATION, probability: 0.6, size: { width: 1, height: 1 } },
+        { emoji: '🍄', type: ObjectType.DECORATION, probability: 0.4, size: { width: 1, height: 1 } }
+      ],
+      rareObjects: [
+        { emoji: '🦌', type: ObjectType.CREATURE, probability: 0.2, size: { width: 1, height: 1 } },
+        { emoji: '🏕️', type: ObjectType.INTERACTIVE, probability: 0.1, size: { width: 2, height: 2 } }
+      ],
+      decorativeObjects: [
+        { emoji: '🪵', type: ObjectType.DECORATION, probability: 0.3, size: { width: 1, height: 1 } }
+      ]
+    });
+
+    // CAVE objects
+    this.terrainObjectSets.set(MapTerrainType.CAVE, {
+      terrain: MapTerrainType.CAVE,
+      commonObjects: [
+        { emoji: '🪨', type: ObjectType.DECORATION, probability: 0.7, size: { width: 1, height: 1 } },
+        { emoji: '🔥', type: ObjectType.LIGHT_SOURCE, probability: 0.3, size: { width: 1, height: 1 } },
+        { emoji: '💧', type: ObjectType.DECORATION, probability: 0.4, size: { width: 1, height: 1 } }
+      ],
+      rareObjects: [
+        { emoji: '💎', type: ObjectType.TREASURE, probability: 0.1, size: { width: 1, height: 1 } },
+        { emoji: '🦇', type: ObjectType.CREATURE, probability: 0.2, size: { width: 1, height: 1 } }
+      ],
+      decorativeObjects: [
+        { emoji: '⚱️', type: ObjectType.DECORATION, probability: 0.2, size: { width: 1, height: 1 } }
+      ]
+    });
+
+    // TOWN objects
+    this.terrainObjectSets.set(MapTerrainType.TOWN, {
+      terrain: MapTerrainType.TOWN,
+      commonObjects: [
+        { emoji: '🏠', type: ObjectType.INTERACTIVE, probability: 0.6, size: { width: 2, height: 2 } },
+        { emoji: '🧺', type: ObjectType.DECORATION, probability: 0.4, size: { width: 1, height: 1 } },
+        { emoji: '🚧', type: ObjectType.DECORATION, probability: 0.3, size: { width: 1, height: 1 } }
+      ],
+      rareObjects: [
+        { emoji: '🍺', type: ObjectType.INTERACTIVE, probability: 0.2, size: { width: 2, height: 2 } },
+        { emoji: '👮', type: ObjectType.CREATURE, probability: 0.1, size: { width: 1, height: 1 } },
+        { emoji: '🐎', type: ObjectType.CREATURE, probability: 0.1, size: { width: 1, height: 1 } }
+      ],
+      decorativeObjects: [
+        { emoji: '🧑‍⚖️', type: ObjectType.CREATURE, probability: 0.3, size: { width: 1, height: 1 } },
+        { emoji: '🛒', type: ObjectType.DECORATION, probability: 0.2, size: { width: 1, height: 1 } }
+      ]
+    });
+  }
+
+  // Select a coordinated color theme for the terrain type
+  private selectColorTheme(terrainType: MapTerrainType): TerrainColorTheme {
+    if (terrainType === MapTerrainType.DUNGEON) {
+      // DUNGEON inherits from a random base terrain type
+      const baseTerrains = [MapTerrainType.HOUSE, MapTerrainType.CAVE, MapTerrainType.FOREST];
+      const baseTerrain = baseTerrains[Math.floor(this.random() * baseTerrains.length)];
+      const baseThemes = this.terrainColorSets.get(baseTerrain) || [];
+      const selectedTheme = baseThemes[Math.floor(this.random() * baseThemes.length)];
+      
+      // Darken the theme for dungeon atmosphere
+      return {
+        ...selectedTheme,
+        name: `Dark ${selectedTheme.name}`,
+        backgroundColor: this.darkenColor(selectedTheme.backgroundColor, 0.3),
+        pathColor: this.darkenColor(selectedTheme.pathColor, 0.2)
+      };
+    }
+
+    const themes = this.terrainColorSets.get(terrainType) || [];
+    return themes[Math.floor(this.random() * themes.length)] || themes[0];
+  }
+
+  // Helper method to darken a color
+  private darkenColor(color: Color, factor: number): Color {
+    return {
+      r: Math.max(0, Math.floor(color.r * (1 - factor))),
+      g: Math.max(0, Math.floor(color.g * (1 - factor))),
+      b: Math.max(0, Math.floor(color.b * (1 - factor))),
+      a: color.a
+    };
+  }
+
+  // Generate map name based on terrain type
+  private generateMapName(terrainType: MapTerrainType): string {
+    const prefixes: { [key in MapTerrainType]: string[] } = {
+      [MapTerrainType.HOUSE]: ['Cozy', 'Grand', 'Ancient', 'Mysterious', 'Humble'],
+      [MapTerrainType.FOREST]: ['Enchanted', 'Dark', 'Whispering', 'Ancient', 'Moonlit'],
+      [MapTerrainType.CAVE]: ['Crystal', 'Shadow', 'Echoing', 'Deep', 'Forgotten'],
+      [MapTerrainType.TOWN]: ['Bustling', 'Peaceful', 'Trading', 'Border', 'Riverside'],
+      [MapTerrainType.DUNGEON]: ['Cursed', 'Lost', 'Forbidden', 'Ancient', 'Treacherous']
+    };
+
+    const suffixes: { [key in MapTerrainType]: string[] } = {
+      [MapTerrainType.HOUSE]: ['Manor', 'Cottage', 'Estate', 'Villa', 'Homestead'],
+      [MapTerrainType.FOREST]: ['Woods', 'Grove', 'Thicket', 'Glade', 'Woodland'],
+      [MapTerrainType.CAVE]: ['Caverns', 'Grotto', 'Depths', 'Hollow', 'Abyss'],
+      [MapTerrainType.TOWN]: ['Village', 'Township', 'Settlement', 'Hamlet', 'Outpost'],
+      [MapTerrainType.DUNGEON]: ['Dungeon', 'Catacombs', 'Ruins', 'Sanctum', 'Labyrinth']
+    };
+
+    const prefix = prefixes[terrainType][Math.floor(this.random() * prefixes[terrainType].length)];
+    const suffix = suffixes[terrainType][Math.floor(this.random() * suffixes[terrainType].length)];
+
+    return `${prefix} ${suffix}`;
+  }
+
+  // Generate rooms based on terrain type rules
+  private generateRoomsByTerrain(options: MapGenerationOptions): GeneratedRoom[] {
+    switch (options.terrainType) {
+      case MapTerrainType.HOUSE:
+        return this.generateOrganizedRooms(options);
+      case MapTerrainType.FOREST:
+        return this.generateOrganicClearings(options);
+      case MapTerrainType.CAVE:
+        return this.generateCaveChambers(options);
+      case MapTerrainType.TOWN:
+        return this.generateBuildingPlots(options);
+      case MapTerrainType.DUNGEON:
+        return this.generateDungeonRooms(options);
+      default:
+        return this.generateOrganizedRooms(options);
+    }
+  }
+
+  // Generate organized rectangular rooms for houses
+  private generateOrganizedRooms(options: MapGenerationOptions): GeneratedRoom[] {
+    const rooms: GeneratedRoom[] = [];
+    const { width, height, numberOfRooms, minRoomSize, maxRoomSize } = options;
+    
+    const roomTypes = ['bedroom', 'kitchen', 'living_room', 'study', 'storage'];
+    
     for (let i = 0; i < numberOfRooms; i++) {
       const roomWidth = minRoomSize + Math.floor(this.random() * (maxRoomSize - minRoomSize));
       const roomHeight = minRoomSize + Math.floor(this.random() * (maxRoomSize - minRoomSize));
@@ -116,17 +383,16 @@ export class MapGenerationService {
         const x = 2 + Math.floor(this.random() * (width - roomWidth - 4));
         const y = 2 + Math.floor(this.random() * (height - roomHeight - 4));
         
-        const newRoom: SimpleRoom = {
+        const newRoom: GeneratedRoom = {
           id: uuidv4(),
-          x,
-          y,
-          width: roomWidth,
-          height: roomHeight
+          type: roomTypes[i % roomTypes.length],
+          shape: { type: 'rectangle' },
+          position: { x, y },
+          size: { width: roomWidth, height: roomHeight }
         };
         
-        // Check if this room overlaps with existing rooms
         const overlaps = rooms.some(existingRoom => 
-          this.roomsOverlap(newRoom, existingRoom)
+          this.roomsOverlap(newRoom, existingRoom, 3)
         );
         
         if (!overlaps) {
@@ -137,144 +403,401 @@ export class MapGenerationService {
         attempts++;
       }
     }
-
+    
     return rooms;
   }
 
-  // Check if two simple rooms overlap (with buffer)
-  private roomsOverlap(roomA: SimpleRoom, roomB: SimpleRoom): boolean {
-    const buffer = 2; // Minimum space between rooms
+  // Generate organic clearings for forests
+  private generateOrganicClearings(options: MapGenerationOptions): GeneratedRoom[] {
+    const rooms: GeneratedRoom[] = [];
+    const { width, height, numberOfRooms, minRoomSize, maxRoomSize, organicFactor } = options;
     
-    return !(roomA.x + roomA.width + buffer < roomB.x ||
-             roomB.x + roomB.width + buffer < roomA.x ||
-             roomA.y + roomA.height + buffer < roomB.y ||
-             roomB.y + roomB.height + buffer < roomA.y);
-  }
-
-  // Generate simple straight paths between rooms
-  private generateSimplePaths(rooms: SimpleRoom[], options: MapGenerationOptions): SimplePath[] {
-    const paths: SimplePath[] = [];
-    
-    if (rooms.length < 2) return paths;
-    
-    // Connect each room to the next one in a chain
-    for (let i = 0; i < rooms.length - 1; i++) {
-      const roomA = rooms[i];
-      const roomB = rooms[i + 1];
+    for (let i = 0; i < numberOfRooms; i++) {
+      const baseRadius = (minRoomSize + Math.floor(this.random() * (maxRoomSize - minRoomSize))) / 2;
       
-      // Create a simple L-shaped path between room centers
-      const path: SimplePath = {
-        id: uuidv4(),
-        startRoom: roomA.id,
-        endRoom: roomB.id,
-        points: this.createLShapedPath(roomA, roomB)
-      };
+      let attempts = 0;
+      let validPlacement = false;
       
-      paths.push(path);
-    }
-    
-    // Connect last room back to first to create a circuit
-    if (rooms.length > 2) {
-      const firstRoom = rooms[0];
-      const lastRoom = rooms[rooms.length - 1];
-      
-      const path: SimplePath = {
-        id: uuidv4(),
-        startRoom: lastRoom.id,
-        endRoom: firstRoom.id,
-        points: this.createLShapedPath(lastRoom, firstRoom)
-      };
-      
-      paths.push(path);
-    }
-    
-    return paths;
-  }
-
-  // Create a simple L-shaped path between two rooms
-  private createLShapedPath(roomA: SimpleRoom, roomB: SimpleRoom): Position[] {
-    const points: Position[] = [];
-    
-    const startX = Math.floor(roomA.x + roomA.width / 2);
-    const startY = Math.floor(roomA.y + roomA.height / 2);
-    const endX = Math.floor(roomB.x + roomB.width / 2);
-    const endY = Math.floor(roomB.y + roomB.height / 2);
-    
-    // Start from room A center
-    points.push({ x: startX, y: startY });
-    
-    // Go horizontal first, then vertical (L-shaped)
-    if (startX !== endX) {
-      // Horizontal segment
-      const stepX = startX < endX ? 1 : -1;
-      for (let x = startX + stepX; x !== endX; x += stepX) {
-        points.push({ x, y: startY });
-      }
-    }
-    
-    // Then vertical segment
-    if (startY !== endY) {
-      const stepY = startY < endY ? 1 : -1;
-      for (let y = startY + stepY; y !== endY; y += stepY) {
-        points.push({ x: endX, y });
-      }
-    }
-    
-    // End at room B center
-    points.push({ x: endX, y: endY });
-    
-    return points;
-  }
-
-  // Create a simple terrain layer with walls, floors, and paths
-  private createSimpleTerrainLayer(rooms: SimpleRoom[], paths: SimplePath[], options: MapGenerationOptions): MapLayer {
-    const tiles: MapTile[] = [];
-    const { width, height } = options;
-    
-    // Start with all walls
-    for (let x = 0; x < width; x++) {
-      for (let y = 0; y < height; y++) {
-        tiles.push({
+      while (!validPlacement && attempts < 50) {
+        const x = baseRadius + 2 + Math.floor(this.random() * (width - baseRadius * 2 - 4));
+        const y = baseRadius + 2 + Math.floor(this.random() * (height - baseRadius * 2 - 4));
+        
+        const newRoom: GeneratedRoom = {
           id: uuidv4(),
+          type: 'clearing',
+          shape: this.generateOrganicShape(baseRadius, organicFactor),
+          position: { x: x - baseRadius, y: y - baseRadius },
+          size: { width: baseRadius * 2, height: baseRadius * 2 }
+        };
+        
+        const overlaps = rooms.some(existingRoom => 
+          this.roomsOverlap(newRoom, existingRoom, 4)
+        );
+        
+        if (!overlaps) {
+          rooms.push(newRoom);
+          validPlacement = true;
+        }
+        
+        attempts++;
+      }
+    }
+    
+    return rooms;
+  }
+
+  // Generate irregular cave chambers
+  private generateCaveChambers(options: MapGenerationOptions): GeneratedRoom[] {
+    const rooms: GeneratedRoom[] = [];
+    const { width, height, numberOfRooms, minRoomSize, maxRoomSize, organicFactor } = options;
+    
+    for (let i = 0; i < numberOfRooms; i++) {
+      const baseRadius = (minRoomSize + Math.floor(this.random() * (maxRoomSize - minRoomSize))) / 2;
+      
+      let attempts = 0;
+      let validPlacement = false;
+      
+      while (!validPlacement && attempts < 50) {
+        const x = baseRadius + 2 + Math.floor(this.random() * (width - baseRadius * 2 - 4));
+        const y = baseRadius + 2 + Math.floor(this.random() * (height - baseRadius * 2 - 4));
+        
+        const newRoom: GeneratedRoom = {
+          id: uuidv4(),
+          type: 'cavern',
+          shape: this.generateOrganicShape(baseRadius, Math.max(0.7, organicFactor)),
+          position: { x: x - baseRadius, y: y - baseRadius },
+          size: { width: baseRadius * 2, height: baseRadius * 2 }
+        };
+        
+        const overlaps = rooms.some(existingRoom => 
+          this.roomsOverlap(newRoom, existingRoom, 2)
+        );
+        
+        if (!overlaps) {
+          rooms.push(newRoom);
+          validPlacement = true;
+        }
+        
+        attempts++;
+      }
+    }
+    
+    return rooms;
+  }
+
+  // Generate building plots for towns
+  private generateBuildingPlots(options: MapGenerationOptions): GeneratedRoom[] {
+    const rooms: GeneratedRoom[] = [];
+    const { width, height, numberOfRooms, minRoomSize, maxRoomSize } = options;
+    
+    const buildingTypes = ['house', 'shop', 'tavern', 'stable', 'workshop'];
+    
+    for (let i = 0; i < numberOfRooms; i++) {
+      const roomWidth = minRoomSize + Math.floor(this.random() * (maxRoomSize - minRoomSize));
+      const roomHeight = minRoomSize + Math.floor(this.random() * (maxRoomSize - minRoomSize));
+      
+      let attempts = 0;
+      let validPlacement = false;
+      
+      while (!validPlacement && attempts < 50) {
+        const x = 3 + Math.floor(this.random() * (width - roomWidth - 6));
+        const y = 3 + Math.floor(this.random() * (height - roomHeight - 6));
+        
+        const newRoom: GeneratedRoom = {
+          id: uuidv4(),
+          type: buildingTypes[Math.floor(this.random() * buildingTypes.length)],
+          shape: { type: 'rectangle' },
           position: { x, y },
-          terrainType: TerrainType.WALL,
-          isVisible: true,
-          isExplored: false
-        });
+          size: { width: roomWidth, height: roomHeight }
+        };
+        
+        const overlaps = rooms.some(existingRoom => 
+          this.roomsOverlap(newRoom, existingRoom, 4)
+        );
+        
+        if (!overlaps) {
+          rooms.push(newRoom);
+          validPlacement = true;
+        }
+        
+        attempts++;
       }
     }
     
-    // Carve out room floors
-    for (const room of rooms) {
-      for (let x = room.x; x < room.x + room.width; x++) {
-        for (let y = room.y; y < room.y + room.height; y++) {
-          const tileIndex = y * width + x;
-          if (tileIndex < tiles.length) {
-            tiles[tileIndex].terrainType = TerrainType.FLOOR;
-          }
-        }
-      }
-    }
+    return rooms;
+  }
+
+  // Generate dungeon rooms (inherits from base terrain type)
+  private generateDungeonRooms(options: MapGenerationOptions): GeneratedRoom[] {
+    // Randomly choose base generation method
+    const methods = [
+      () => this.generateOrganizedRooms(options),
+      () => this.generateCaveChambers(options)
+    ];
     
-    // Carve out path floors
-    for (const path of paths) {
-      for (const point of path.points) {
-        const tileIndex = point.y * width + point.x;
-        if (tileIndex < tiles.length) {
-          tiles[tileIndex].terrainType = TerrainType.FLOOR;
-        }
-      }
+    const selectedMethod = methods[Math.floor(this.random() * methods.length)];
+    const rooms = selectedMethod();
+    
+    // Add dungeon-specific room types
+    rooms.forEach(room => {
+      const dungeonTypes = ['chamber', 'corridor', 'trap_room', 'treasure_room', 'guard_room'];
+      room.type = dungeonTypes[Math.floor(this.random() * dungeonTypes.length)];
+    });
+    
+    return rooms;
+  }
+
+  // Generate organic shape for clearings and caverns
+  private generateOrganicShape(baseRadius: number, organicFactor: number): RoomShape {
+    const points: Position[] = [];
+    const numPoints = 8 + Math.floor(this.random() * 8); // 8-16 points
+    
+    for (let i = 0; i < numPoints; i++) {
+      const angle = (i / numPoints) * 2 * Math.PI;
+      const radiusVariation = 1 + (this.random() - 0.5) * organicFactor * 0.5;
+      const radius = baseRadius * radiusVariation;
+      
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius;
+      
+      points.push({ x: Math.round(x), y: Math.round(y) });
     }
     
     return {
+      type: 'organic',
+      points
+    };
+  }
+
+  // Check if two rooms overlap with buffer
+  private roomsOverlap(roomA: GeneratedRoom, roomB: GeneratedRoom, buffer: number): boolean {
+    const aLeft = roomA.position.x - buffer;
+    const aRight = roomA.position.x + roomA.size.width + buffer;
+    const aTop = roomA.position.y - buffer;
+    const aBottom = roomA.position.y + roomA.size.height + buffer;
+    
+    const bLeft = roomB.position.x;
+    const bRight = roomB.position.x + roomB.size.width;
+    const bTop = roomB.position.y;
+    const bBottom = roomB.position.y + roomB.size.height;
+    
+    return !(aRight < bLeft || bRight < aLeft || aBottom < bTop || bBottom < aTop);
+  }
+
+  // Create background layer
+  private createBackgroundLayer(colorTheme: TerrainColorTheme): MapLayer {
+    return {
       id: uuidv4(),
-      name: 'Terrain',
-      type: LayerType.TERRAIN,
-      tiles,
+      name: 'Background',
+      type: LayerType.BACKGROUND,
+      objects: [],
       isVisible: true,
       isLocked: false,
       opacity: 1
     };
+  }
+
+  // Create room layer with room shapes as objects
+  private createRoomLayer(rooms: GeneratedRoom[], colorTheme: TerrainColorTheme): MapLayer {
+    const roomObjects: MapObject[] = rooms.map(room => ({
+      id: room.id,
+      type: ObjectType.DECORATION,
+      position: room.position,
+      size: room.size,
+      name: `${room.type}_room`,
+      color: colorTheme.backgroundColor,
+      properties: {
+        roomType: room.type,
+        shape: room.shape
+      },
+      isVisible: true,
+      isInteractive: false
+    }));
+
+    return {
+      id: uuidv4(),
+      name: 'Rooms',
+      type: LayerType.TERRAIN,
+      objects: roomObjects,
+      isVisible: true,
+      isLocked: false,
+      opacity: 1
+    };
+  }
+
+  // Create path layer
+  private createPathLayer(rooms: GeneratedRoom[], options: MapGenerationOptions, colorTheme: TerrainColorTheme): MapLayer {
+    const pathObjects: MapObject[] = [];
+    
+    if (options.terrainType === MapTerrainType.TOWN) {
+      // Generate full-coverage organic rectangle for town
+      const townPath = this.generateTownPaths(options, colorTheme);
+      pathObjects.push(townPath);
+    } else {
+      // Generate connecting paths between rooms
+      const connectingPaths = this.generateConnectingPaths(rooms, options, colorTheme);
+      pathObjects.push(...connectingPaths);
+    }
+
+    return {
+      id: uuidv4(),
+      name: 'Paths',
+      type: LayerType.TERRAIN,
+      objects: pathObjects,
+      isVisible: true,
+      isLocked: false,
+      opacity: 1
+    };
+  }
+
+  // Generate town paths (full-coverage organic rectangle)
+  private generateTownPaths(options: MapGenerationOptions, colorTheme: TerrainColorTheme): MapObject {
+    const { width, height } = options;
+    const margin = 2;
+    
+    // Create organic rectangle covering most of the map
+    const baseWidth = width - margin * 2;
+    const baseHeight = height - margin * 2;
+    
+    return {
+      id: uuidv4(),
+      type: ObjectType.DECORATION,
+      position: { x: margin, y: margin },
+      size: { width: baseWidth, height: baseHeight },
+      name: 'town_streets',
+      color: colorTheme.pathColor,
+      properties: {
+        pathType: 'town_streets',
+        coverage: 0.85
+      },
+      isVisible: true,
+      isInteractive: false
+    };
+  }
+
+  // Generate connecting paths between rooms
+  private generateConnectingPaths(rooms: GeneratedRoom[], options: MapGenerationOptions, colorTheme: TerrainColorTheme): MapObject[] {
+    const pathObjects: MapObject[] = [];
+    
+    if (rooms.length < 2) return pathObjects;
+    
+    // Connect rooms in sequence
+    for (let i = 0; i < rooms.length - 1; i++) {
+      const roomA = rooms[i];
+      const roomB = rooms[i + 1];
+      
+      const path = this.createPathBetweenRooms(roomA, roomB, options, colorTheme);
+      pathObjects.push(path);
+    }
+    
+    // Connect last room to first to create circuit
+    if (rooms.length > 2) {
+      const lastRoom = rooms[rooms.length - 1];
+      const firstRoom = rooms[0];
+      const path = this.createPathBetweenRooms(lastRoom, firstRoom, options, colorTheme);
+      pathObjects.push(path);
+    }
+    
+    return pathObjects;
+  }
+
+  // Create a path between two rooms
+  private createPathBetweenRooms(roomA: GeneratedRoom, roomB: GeneratedRoom, options: MapGenerationOptions, colorTheme: TerrainColorTheme): MapObject {
+    const startX = roomA.position.x + roomA.size.width / 2;
+    const startY = roomA.position.y + roomA.size.height / 2;
+    const endX = roomB.position.x + roomB.size.width / 2;
+    const endY = roomB.position.y + roomB.size.height / 2;
+    
+    const pathWidth = options.terrainType === MapTerrainType.FOREST ? 1 : 
+                     options.terrainType === MapTerrainType.CAVE ? 2 + Math.floor(this.random() * 2) : 2;
+    
+    return {
+      id: uuidv4(),
+      type: ObjectType.DECORATION,
+      position: { x: Math.min(startX, endX), y: Math.min(startY, endY) },
+      size: { 
+        width: Math.abs(endX - startX) + pathWidth, 
+        height: Math.abs(endY - startY) + pathWidth 
+      },
+      name: 'connecting_path',
+      color: colorTheme.pathColor,
+      properties: {
+        pathType: 'corridor',
+        width: pathWidth,
+        start: { x: startX, y: startY },
+        end: { x: endX, y: endY }
+      },
+      isVisible: true,
+      isInteractive: false
+    };
+  }
+
+  // Create objects layer with terrain-appropriate objects
+  private createObjectsLayer(rooms: GeneratedRoom[], options: MapGenerationOptions): MapLayer {
+    const objects: MapObject[] = [];
+    const objectSet = this.terrainObjectSets.get(options.terrainType);
+    
+    if (!objectSet) return {
+      id: uuidv4(),
+      name: 'Objects',
+      type: LayerType.OBJECTS,
+      objects: [],
+      isVisible: true,
+      isLocked: false,
+      opacity: 1
+    };
+    
+    // Place objects in rooms
+    rooms.forEach(room => {
+      this.placeObjectsInRoom(room, objectSet, options.objectDensity, objects);
+    });
+    
+    return {
+      id: uuidv4(),
+      name: 'Objects',
+      type: LayerType.OBJECTS,
+      objects,
+      isVisible: true,
+      isLocked: false,
+      opacity: 1
+    };
+  }
+
+  // Place objects within a specific room
+  private placeObjectsInRoom(room: GeneratedRoom, objectSet: TerrainObjectSet, density: number, objects: MapObject[]): void {
+    const allObjects = [...objectSet.commonObjects, ...objectSet.rareObjects, ...objectSet.decorativeObjects];
+    
+    // Filter objects appropriate for this room type
+    const appropriateObjects = allObjects.filter(obj => 
+      !obj.roomTypes || obj.roomTypes.includes(room.type)
+    );
+    
+    const maxObjects = Math.floor((room.size.width * room.size.height / 4) * density);
+    
+    for (let i = 0; i < maxObjects; i++) {
+      if (this.random() > 0.6) continue; // 40% chance to place object
+      
+      const objDef = appropriateObjects[Math.floor(this.random() * appropriateObjects.length)];
+      if (this.random() > objDef.probability) continue;
+      
+      // Find valid position within room
+      const objX = room.position.x + Math.floor(this.random() * (room.size.width - objDef.size.width));
+      const objY = room.position.y + Math.floor(this.random() * (room.size.height - objDef.size.height));
+      
+      objects.push({
+        id: uuidv4(),
+        type: objDef.type,
+        position: { x: objX, y: objY },
+        size: objDef.size,
+        name: objDef.emoji,
+        properties: {
+          emoji: objDef.emoji,
+          roomId: room.id
+        },
+        isVisible: true,
+        isInteractive: objDef.type === ObjectType.INTERACTIVE
+      });
+    }
   }
 }
 
