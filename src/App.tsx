@@ -262,8 +262,7 @@ function App() {
       minRoomSize: 4,
       maxRoomSize: 8,
       corridorWidth: 2,
-      organicFactor: 0.7,
-      environmentType: 'dungeon'
+      organicFactor: 0.7
     };
 
     try {
