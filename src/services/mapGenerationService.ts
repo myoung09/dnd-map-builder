@@ -216,20 +216,13 @@ export class MapGenerationService {
     // Step 1: Generate rooms
     const rooms = this.generateRoomsByTerrain(options);
     
-    // Step 2: Generate BSP corridors (if BSP was used)
+    // Step 2: Generate corridors using MST approach for all terrain types
     let corridors: Position[][] = [];
     
-    if (terrainType === MapTerrainType.HOUSE || 
-        terrainType === MapTerrainType.CAVE || 
-        terrainType === MapTerrainType.DUNGEON) {
-      // BSP-based terrains: Connect rooms directly
-      corridors = this.connectRoomsWithCorridors(rooms);
-      console.log(`Generated ${corridors.length} corridors for ${rooms.length} rooms`);
-      corridors.forEach((c, i) => console.log(`Corridor ${i}: ${c.length} points`));
-    } else {
-      // Use traditional path generation
-      corridors = this.generateTraditionalPaths(rooms, options, width, height);
-    }
+    // All terrains now use BSP + MST corridor connections
+    corridors = this.connectRoomsWithCorridors(rooms);
+    console.log(`Generated ${corridors.length} corridors for ${rooms.length} rooms`);
+    corridors.forEach((c, i) => console.log(`Corridor ${i}: ${c.length} points`));
     
     // Step 3: Build grid map for connectivity check
     const gridMap = this.buildGridMap(rooms, corridors, width, height);
@@ -241,14 +234,11 @@ export class MapGenerationService {
       corridors.push(...dijkstraCorridors);
     }
     
-    // Step 5: Create entrance/exit (for caves, forests, dungeons, and houses)
+    // Step 5: Create entrance/exit for all terrain types except TOWN
     let entrance: Position | undefined;
     let exit: Position | undefined;
     
-    if (terrainType === MapTerrainType.CAVE || 
-        terrainType === MapTerrainType.FOREST || 
-        terrainType === MapTerrainType.DUNGEON ||
-        terrainType === MapTerrainType.HOUSE) {
+    if (terrainType !== MapTerrainType.TOWN) {
       const entranceExit = this.createEntranceExit(rooms, corridors, options);
       entrance = entranceExit.entrance;
       exit = entranceExit.exit;
@@ -1241,11 +1231,11 @@ export class MapGenerationService {
       case MapTerrainType.HOUSE:
         return this.generateBSPRooms(options); // Use BSP for houses
       case MapTerrainType.FOREST:
-        return this.generateOrganicClearings(options);
+        return this.generateBSPRooms(options); // Use BSP for forests (clearings as rooms)
       case MapTerrainType.CAVE:
         return this.generateBSPRooms(options); // Use BSP for caves
       case MapTerrainType.TOWN:
-        return this.generateBuildingPlots(options);
+        return this.generateBSPRooms(options); // Use BSP for towns (buildings as rooms)
       case MapTerrainType.DUNGEON:
         return this.generateBSPRooms(options); // Use BSP for dungeons
       default:
