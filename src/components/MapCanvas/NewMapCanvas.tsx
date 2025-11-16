@@ -227,32 +227,29 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
           
           // Check if this is an organic curved path
           if (obj.properties?.isOrganic && obj.properties?.pathPoints) {
-            // Render organic path as smooth curve
+            // Render organic path as smooth continuous line
             const pathPoints = obj.properties.pathPoints;
-            const pathElements: JSX.Element[] = [];
             const defaultPathWidth = obj.properties?.width || 2;
             
-            // Render path as connected circles for smooth organic look
-            pathPoints.forEach((point: { x: number; y: number; width?: number }, idx: number) => {
-              const cellWidth = (point.width || defaultPathWidth) * gridSize;
-              
-              pathElements.push(
-                <Rect
-                  key={`${obj.id}-path-${idx}`}
-                  x={point.x * gridSize - cellWidth / 2}
-                  y={point.y * gridSize - cellWidth / 2}
-                  width={cellWidth}
-                  height={cellWidth}
-                  fill={fillColor}
-                  listening={false}
-                  cornerRadius={cellWidth / 2} // Full rounding for organic feel
-                />
-              );
+            // Convert path points to flat array for Konva Line
+            const linePoints: number[] = [];
+            pathPoints.forEach((point: { x: number; y: number; width?: number }) => {
+              linePoints.push(point.x * gridSize);
+              linePoints.push(point.y * gridSize);
             });
             
+            // Render as smooth line with tension
             allObjects.push(
               <Group key={obj.id}>
-                {pathElements}
+                <Line
+                  points={linePoints}
+                  stroke={fillColor}
+                  strokeWidth={defaultPathWidth * gridSize}
+                  lineCap="round"
+                  lineJoin="round"
+                  tension={0.3}
+                  listening={false}
+                />
                 {isSelected && (
                   <Rect
                     x={x}

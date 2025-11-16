@@ -820,33 +820,36 @@ export class MapGenerationService {
                              options.terrainType === MapTerrainType.CAVE;
     
     if (isOrganicTerrain) {
-      // Create curved, natural-looking path
+      // Create curved, natural-looking path using Bezier curves
       const pathPoints: (Position & { width?: number })[] = [];
       const distance = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
-      const numSegments = Math.max(8, Math.floor(distance / 3)); // More segments for smoother curves
+      
+      // Calculate control point once for consistent curve
+      const midX = (startX + endX) / 2 + (this.random() - 0.5) * distance * 0.4;
+      const midY = (startY + endY) / 2 + (this.random() - 0.5) * distance * 0.4;
+      
+      // Create dense path segments (every 0.5 units) for smooth overlapping appearance
+      const numSegments = Math.max(16, Math.floor(distance * 2));
       
       for (let i = 0; i <= numSegments; i++) {
         const t = i / numSegments;
         
-        // Use quadratic bezier curve as base path
-        const midX = (startX + endX) / 2 + (this.random() - 0.5) * distance * 0.3;
-        const midY = (startY + endY) / 2 + (this.random() - 0.5) * distance * 0.3;
-        
+        // Quadratic Bezier curve formula: B(t) = (1-t)²P0 + 2(1-t)tP1 + t²P2
         const bezierX = Math.pow(1-t, 2) * startX + 2 * (1-t) * t * midX + Math.pow(t, 2) * endX;
         const bezierY = Math.pow(1-t, 2) * startY + 2 * (1-t) * t * midY + Math.pow(t, 2) * endY;
         
-        // Add random wobble
-        const wobbleX = (this.random() - 0.5) * 2;
-        const wobbleY = (this.random() - 0.5) * 2;
+        // Add subtle wobble for organic feel (reduced for smoother paths)
+        const wobbleX = (this.random() - 0.5) * 0.5;
+        const wobbleY = (this.random() - 0.5) * 0.5;
         
-        const finalX = Math.round(bezierX + wobbleX);
-        const finalY = Math.round(bezierY + wobbleY);
+        const finalX = bezierX + wobbleX;
+        const finalY = bezierY + wobbleY;
         
-        // Variable width
-        const widthVariation = this.random() < 0.3 ? (this.random() < 0.5 ? 1 : -1) : 0;
+        // Variable width (less variation for smoother appearance)
+        const widthVariation = this.random() < 0.15 ? (this.random() < 0.5 ? 0.5 : -0.5) : 0;
         
         pathPoints.push({
-          x: finalX,
+          x: finalX, // Don't round - keep decimal precision for smooth curves
           y: finalY,
           width: Math.max(1, pathWidth + widthVariation)
         });
