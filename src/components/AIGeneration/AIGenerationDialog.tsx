@@ -24,11 +24,17 @@ import {
   AutoAwesome, 
   Close, 
   Settings,
-  Lightbulb 
+  Lightbulb,
+  Home,
+  Park,
+  Terrain,
+  LocationCity,
+  Castle
 } from '@mui/icons-material';
 import { DnDMap } from '../../types/map';
 import { AIGenerationOptions, AIGenerationResult, aiMapGenerationService } from '../../services/aiGenerationService';
 import { AI_GENERATION } from '../../utils/constants';
+import { MapTerrainType, mapGenerationService, MapGenerationOptions } from '../../services/mapGenerationService';
 
 interface AIGenerationDialogProps {
   open: boolean;
@@ -42,6 +48,46 @@ interface GenerationState {
   error: string | null;
   result: AIGenerationResult | null;
 }
+
+interface MapTypeOption {
+  value: MapTerrainType;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+}
+
+const MAP_TYPE_OPTIONS: MapTypeOption[] = [
+  {
+    value: MapTerrainType.HOUSE,
+    label: 'House/Building',
+    description: 'Interior rooms with furniture',
+    icon: <Home />
+  },
+  {
+    value: MapTerrainType.FOREST,
+    label: 'Forest/Wilderness',
+    description: 'Natural clearings and trails',
+    icon: <Park />
+  },
+  {
+    value: MapTerrainType.CAVE,
+    label: 'Cave/Underground',
+    description: 'Caverns and tunnels',
+    icon: <Terrain />
+  },
+  {
+    value: MapTerrainType.TOWN,
+    label: 'Town/City',
+    description: 'Streets and buildings',
+    icon: <LocationCity />
+  },
+  {
+    value: MapTerrainType.DUNGEON,
+    label: 'Dungeon',
+    description: 'Chambers and corridors',
+    icon: <Castle />
+  }
+];
 
 const EXAMPLE_PROMPTS = [
   "A small tavern with wooden tables, a bar counter, and a fireplace in the corner",
@@ -57,6 +103,7 @@ export const AIGenerationDialog: React.FC<AIGenerationDialogProps> = ({
   onMapGenerated
 }) => {
   const [prompt, setPrompt] = useState('');
+  const [mapType, setMapType] = useState<MapTerrainType>(MapTerrainType.DUNGEON);
   const [options, setOptions] = useState<AIGenerationOptions>({
     mapSize: { width: 30, height: 30 },
     style: 'custom',
@@ -78,7 +125,8 @@ export const AIGenerationDialog: React.FC<AIGenerationDialogProps> = ({
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
-      setGeneration(prev => ({ ...prev, error: 'Please enter a description for your map' }));
+      // If no prompt, use quick procedural generation
+      handleQuickGenerate();
       return;
     }
 
@@ -116,6 +164,55 @@ export const AIGenerationDialog: React.FC<AIGenerationDialogProps> = ({
           handleClose();
         }, 1500);
       }
+    } catch (error) {
+      setGeneration({
+        isGenerating: false,
+        progress: 0,
+        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        result: null
+      });
+    }
+  };
+
+  const handleQuickGenerate = () => {
+    try {
+      setGeneration({
+        isGenerating: true,
+        progress: 50,
+        error: null,
+        result: null
+      });
+
+      // Use procedural generation service
+      const mapOptions: MapGenerationOptions = {
+        width: options.mapSize.width,
+        height: options.mapSize.height,
+        terrainType: mapType,
+        numberOfRooms: options.complexity === 'simple' ? 3 : options.complexity === 'moderate' ? 5 : 8,
+        minRoomSize: 3,
+        maxRoomSize: options.complexity === 'simple' ? 6 : options.complexity === 'moderate' ? 8 : 12,
+        organicFactor: mapType === MapTerrainType.CAVE || mapType === MapTerrainType.FOREST ? 0.7 : 0.3,
+        objectDensity: options.includeObjects ? 0.6 : 0.2
+      };
+
+      const generatedMap = mapGenerationService.generateLayeredMap(mapOptions);
+
+      setGeneration({
+        isGenerating: false,
+        progress: 100,
+        error: null,
+        result: {
+          success: true,
+          message: 'Map generated successfully',
+          map: generatedMap
+        }
+      });
+
+      // Auto-close and pass map
+      setTimeout(() => {
+        onMapGenerated(generatedMap);
+        handleClose();
+      }, 1000);
     } catch (error) {
       setGeneration({
         isGenerating: false,
@@ -178,6 +275,52 @@ export const AIGenerationDialog: React.FC<AIGenerationDialogProps> = ({
             </Alert>
           )}
 
+          {/* Map Type Selection */}
+          <Box>
+            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Castle fontSize="small" />
+              Select Map Type
+            </Typography>
+            <Typography variant="body2" color="text.secondary" gutterBottom>
+              Choose the type of map you want to generate
+            </Typography>
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 1, mt: 2 }}>
+              {MAP_TYPE_OPTIONS.map((option) => (
+                <Paper
+                  key={option.value}
+                  elevation={mapType === option.value ? 3 : 1}
+                  sx={{
+                    p: 2,
+                    cursor: 'pointer',
+                    border: mapType === option.value ? 2 : 1,
+                    borderColor: mapType === option.value ? 'primary.main' : 'divider',
+                    transition: 'all 0.2s',
+                    '&:hover': {
+                      elevation: 3,
+                      borderColor: 'primary.light'
+                    }
+                  }}
+                  onClick={() => {
+                    setMapType(option.value);
+                    setGeneration(prev => ({ ...prev, error: null }));
+                  }}
+                >
+                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                    <Box sx={{ color: mapType === option.value ? 'primary.main' : 'text.secondary' }}>
+                      {option.icon}
+                    </Box>
+                    <Typography variant="subtitle2" align="center">
+                      {option.label}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" align="center">
+                      {option.description}
+                    </Typography>
+                  </Box>
+                </Paper>
+              ))}
+            </Box>
+          </Box>
+
           {/* Main Prompt Input */}
           <Box>
             <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -193,12 +336,12 @@ export const AIGenerationDialog: React.FC<AIGenerationDialogProps> = ({
                 setPrompt(e.target.value);
                 setGeneration(prev => ({ ...prev, error: null }));
               }}
-              placeholder="Describe the map you want to create... (e.g., 'A cozy tavern with wooden furniture and a stone fireplace')"
+              placeholder="Optional: Describe specific features... (e.g., 'A cozy tavern with wooden furniture and a stone fireplace'). Leave empty for quick generation."
               disabled={generation.isGenerating}
               inputProps={{
                 maxLength: AI_GENERATION.MAX_PROMPT_LENGTH
               }}
-              helperText={`${prompt.length}/${AI_GENERATION.MAX_PROMPT_LENGTH} characters`}
+              helperText={prompt.trim() ? `${prompt.length}/${AI_GENERATION.MAX_PROMPT_LENGTH} characters - Will use AI generation` : 'Leave empty for quick procedural generation based on map type'}
             />
           </Box>
 
@@ -391,10 +534,10 @@ export const AIGenerationDialog: React.FC<AIGenerationDialogProps> = ({
         <Button
           variant="contained"
           onClick={handleGenerate}
-          disabled={generation.isGenerating || !prompt.trim()}
+          disabled={generation.isGenerating}
           startIcon={generation.isGenerating ? undefined : <AutoAwesome />}
         >
-          {generation.isGenerating ? 'Generating...' : 'Generate Map'}
+          {generation.isGenerating ? 'Generating...' : prompt.trim() ? 'Generate with AI' : 'Quick Generate'}
         </Button>
       </DialogActions>
     </Dialog>

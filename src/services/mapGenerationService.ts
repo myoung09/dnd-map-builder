@@ -53,6 +53,7 @@ interface GeneratedRoom {
   position: Position;
   size: { width: number; height: number };
   color?: Color;
+  doors?: Position[]; // Door/opening positions for path connections
 }
 
 interface RoomShape {
@@ -91,11 +92,12 @@ export class MapGenerationService {
     // Generate rooms based on terrain type
     const rooms = this.generateRoomsByTerrain(options);
     
-    // Create the 5 layers: Background → Rooms → Paths → Grid → Objects
+    // Create the layers: Background → Rooms → Paths → Objects → Grid (Grid must be last to render on top)
     const backgroundLayer = this.createBackgroundLayer(colorTheme);
     const roomLayer = this.createRoomLayer(rooms, colorTheme);
     const pathLayer = this.createPathLayer(rooms, options, colorTheme);
     const objectsLayer = this.createObjectsLayer(rooms, options);
+    const gridLayer = this.createGridLayer(options);
 
     const mapId = uuidv4();
     const mapName = this.generateMapName(options.terrainType);
@@ -120,7 +122,7 @@ export class MapGenerationService {
         snapToGrid: true,
         gridType: 'square'
       },
-      layers: [backgroundLayer, roomLayer, pathLayer, objectsLayer],
+      layers: [backgroundLayer, roomLayer, pathLayer, objectsLayer, gridLayer],
       backgroundColor: colorTheme.backgroundColor
     };
   }
@@ -388,7 +390,8 @@ export class MapGenerationService {
           type: roomTypes[i % roomTypes.length],
           shape: { type: 'rectangle' },
           position: { x, y },
-          size: { width: roomWidth, height: roomHeight }
+          size: { width: roomWidth, height: roomHeight },
+          doors: this.generateRoomDoors({ x, y }, { width: roomWidth, height: roomHeight })
         };
         
         const overlaps = rooms.some(existingRoom => 
@@ -405,6 +408,41 @@ export class MapGenerationService {
     }
     
     return rooms;
+  }
+
+  // Generate door positions for a room
+  private generateRoomDoors(position: Position, size: { width: number; height: number }): Position[] {
+    const doors: Position[] = [];
+    const numDoors = 1 + Math.floor(this.random() * 2); // 1-2 doors per room
+    
+    for (let i = 0; i < numDoors; i++) {
+      const side = Math.floor(this.random() * 4); // 0=top, 1=right, 2=bottom, 3=left
+      
+      let doorX, doorY;
+      switch (side) {
+        case 0: // Top
+          doorX = position.x + Math.floor(size.width / 2);
+          doorY = position.y;
+          break;
+        case 1: // Right
+          doorX = position.x + size.width - 1;
+          doorY = position.y + Math.floor(size.height / 2);
+          break;
+        case 2: // Bottom
+          doorX = position.x + Math.floor(size.width / 2);
+          doorY = position.y + size.height - 1;
+          break;
+        case 3: // Left
+        default:
+          doorX = position.x;
+          doorY = position.y + Math.floor(size.height / 2);
+          break;
+      }
+      
+      doors.push({ x: doorX, y: doorY });
+    }
+    
+    return doors;
   }
 
   // Generate organic clearings for forests
@@ -427,7 +465,8 @@ export class MapGenerationService {
           type: 'clearing',
           shape: this.generateOrganicShape(baseRadius, organicFactor),
           position: { x: x - baseRadius, y: y - baseRadius },
-          size: { width: baseRadius * 2, height: baseRadius * 2 }
+          size: { width: baseRadius * 2, height: baseRadius * 2 },
+          doors: [{ x, y }] // Single connection point at center
         };
         
         const overlaps = rooms.some(existingRoom => 
@@ -466,7 +505,8 @@ export class MapGenerationService {
           type: 'cavern',
           shape: this.generateOrganicShape(baseRadius, Math.max(0.7, organicFactor)),
           position: { x: x - baseRadius, y: y - baseRadius },
-          size: { width: baseRadius * 2, height: baseRadius * 2 }
+          size: { width: baseRadius * 2, height: baseRadius * 2 },
+          doors: [{ x, y }] // Single connection point at center
         };
         
         const overlaps = rooms.some(existingRoom => 
@@ -508,7 +548,8 @@ export class MapGenerationService {
           type: buildingTypes[Math.floor(this.random() * buildingTypes.length)],
           shape: { type: 'rectangle' },
           position: { x, y },
-          size: { width: roomWidth, height: roomHeight }
+          size: { width: roomWidth, height: roomHeight },
+          doors: this.generateRoomDoors({ x, y }, { width: roomWidth, height: roomHeight })
         };
         
         const overlaps = rooms.some(existingRoom => 
@@ -538,10 +579,15 @@ export class MapGenerationService {
     const selectedMethod = methods[Math.floor(this.random() * methods.length)];
     const rooms = selectedMethod();
     
-    // Add dungeon-specific room types
+    // Add dungeon-specific room types and ensure doors exist
     rooms.forEach(room => {
       const dungeonTypes = ['chamber', 'corridor', 'trap_room', 'treasure_room', 'guard_room'];
       room.type = dungeonTypes[Math.floor(this.random() * dungeonTypes.length)];
+      
+      // Ensure doors exist
+      if (!room.doors || room.doors.length === 0) {
+        room.doors = this.generateRoomDoors(room.position, room.size);
+      }
     });
     
     return rooms;
@@ -605,7 +651,7 @@ export class MapGenerationService {
       position: room.position,
       size: room.size,
       name: `${room.type}_room`,
-      color: colorTheme.backgroundColor,
+      color: colorTheme.pathColor, // Use same color as paths for consistency
       properties: {
         roomType: room.type,
         shape: room.shape
@@ -647,6 +693,37 @@ export class MapGenerationService {
       isVisible: true,
       isLocked: false,
       opacity: 1
+    };
+  }
+
+  // Create grid layer as a resizable object
+  private createGridLayer(options: MapGenerationOptions): MapLayer {
+    const gridObject: MapObject = {
+      id: uuidv4(),
+      type: ObjectType.GRID,
+      position: { x: 0, y: 0 },
+      size: { width: options.width, height: options.height },
+      name: 'Grid Overlay',
+      description: 'Resizable grid overlay',
+      isVisible: true,
+      isInteractive: true,
+      opacity: 0.3,
+      properties: {
+        gridType: 'square',
+        cellSize: 1, // 1 grid cell = 1 unit
+        lineColor: { r: 200, g: 200, b: 200, a: 0.3 },
+        lineWidth: 1
+      }
+    };
+
+    return {
+      id: uuidv4(),
+      name: 'Grid',
+      type: LayerType.OVERLAY,
+      objects: [gridObject],
+      isVisible: true,
+      isLocked: false,
+      opacity: 0.3
     };
   }
 
@@ -703,21 +780,83 @@ export class MapGenerationService {
 
   // Create a path between two rooms
   private createPathBetweenRooms(roomA: GeneratedRoom, roomB: GeneratedRoom, options: MapGenerationOptions, colorTheme: TerrainColorTheme): MapObject {
-    const startX = roomA.position.x + roomA.size.width / 2;
-    const startY = roomA.position.y + roomA.size.height / 2;
-    const endX = roomB.position.x + roomB.size.width / 2;
-    const endY = roomB.position.y + roomB.size.height / 2;
+    // Find the closest door positions between the two rooms
+    let startX, startY, endX, endY;
+    
+    if (roomA.doors && roomA.doors.length > 0 && roomB.doors && roomB.doors.length > 0) {
+      // Find closest pair of doors
+      let minDistance = Infinity;
+      let bestDoorA = roomA.doors[0];
+      let bestDoorB = roomB.doors[0];
+      
+      for (const doorA of roomA.doors) {
+        for (const doorB of roomB.doors) {
+          const distance = Math.abs(doorA.x - doorB.x) + Math.abs(doorA.y - doorB.y);
+          if (distance < minDistance) {
+            minDistance = distance;
+            bestDoorA = doorA;
+            bestDoorB = doorB;
+          }
+        }
+      }
+      
+      startX = bestDoorA.x;
+      startY = bestDoorA.y;
+      endX = bestDoorB.x;
+      endY = bestDoorB.y;
+    } else {
+      // Fallback to room centers if no doors defined
+      startX = roomA.position.x + roomA.size.width / 2;
+      startY = roomA.position.y + roomA.size.height / 2;
+      endX = roomB.position.x + roomB.size.width / 2;
+      endY = roomB.position.y + roomB.size.height / 2;
+    }
     
     const pathWidth = options.terrainType === MapTerrainType.FOREST ? 1 : 
                      options.terrainType === MapTerrainType.CAVE ? 2 + Math.floor(this.random() * 2) : 2;
+    
+    // Create L-shaped corridor with path segments
+    // Store the corridor as a series of points for proper rendering
+    const corridorPoints: Position[] = [];
+    
+    // Decide whether to go horizontal-first or vertical-first
+    const horizontalFirst = this.random() > 0.5;
+    
+    if (horizontalFirst) {
+      // Horizontal segment
+      const minX = Math.min(startX, endX);
+      const maxX = Math.max(startX, endX);
+      for (let x = minX; x <= maxX; x++) {
+        corridorPoints.push({ x, y: startY });
+      }
+      // Vertical segment
+      const minY = Math.min(startY, endY);
+      const maxY = Math.max(startY, endY);
+      for (let y = minY; y <= maxY; y++) {
+        corridorPoints.push({ x: endX, y });
+      }
+    } else {
+      // Vertical segment
+      const minY = Math.min(startY, endY);
+      const maxY = Math.max(startY, endY);
+      for (let y = minY; y <= maxY; y++) {
+        corridorPoints.push({ x: startX, y });
+      }
+      // Horizontal segment
+      const minX = Math.min(startX, endX);
+      const maxX = Math.max(startX, endX);
+      for (let x = minX; x <= maxX; x++) {
+        corridorPoints.push({ x, y: endY });
+      }
+    }
     
     return {
       id: uuidv4(),
       type: ObjectType.DECORATION,
       position: { x: Math.min(startX, endX), y: Math.min(startY, endY) },
       size: { 
-        width: Math.abs(endX - startX) + pathWidth, 
-        height: Math.abs(endY - startY) + pathWidth 
+        width: Math.max(1, Math.abs(endX - startX)), 
+        height: Math.max(1, Math.abs(endY - startY))
       },
       name: 'connecting_path',
       color: colorTheme.pathColor,
@@ -725,7 +864,9 @@ export class MapGenerationService {
         pathType: 'corridor',
         width: pathWidth,
         start: { x: startX, y: startY },
-        end: { x: endX, y: endY }
+        end: { x: endX, y: endY },
+        corridorPoints, // Store the actual corridor cells
+        isLShaped: true
       },
       isVisible: true,
       isInteractive: false

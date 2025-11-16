@@ -92,41 +92,8 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
 
   // Render grid
   const renderGrid = () => {
-    if (!showGrid) return null;
-
-    const lines: JSX.Element[] = [];
-    const totalWidth = map.dimensions.width * gridSize;
-    const totalHeight = map.dimensions.height * gridSize;
-
-    // Vertical lines
-    for (let i = 0; i <= map.dimensions.width; i++) {
-      lines.push(
-        <Rect
-          key={`v-${i}`}
-          x={i * gridSize}
-          y={0}
-          width={1}
-          height={totalHeight}
-          fill="rgba(200, 200, 200, 0.3)"
-        />
-      );
-    }
-
-    // Horizontal lines
-    for (let i = 0; i <= map.dimensions.height; i++) {
-      lines.push(
-        <Rect
-          key={`h-${i}`}
-          x={0}
-          y={i * gridSize}
-          width={totalWidth}
-          height={1}
-          fill="rgba(200, 200, 200, 0.3)"
-        />
-      );
-    }
-
-    return <Group>{lines}</Group>;
+    // Grid is now rendered as an object in layers, not here
+    return null;
   };
 
   // Render map objects
@@ -142,6 +109,66 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
         const width = obj.size.width * gridSize;
         const height = obj.size.height * gridSize;
         const isSelected = selectedObjects.includes(obj.id);
+
+        // Handle grid objects specially
+        if (obj.type === 'grid') {
+          const gridCellSize = (obj.properties?.cellSize || 1) * gridSize;
+          const gridLines: JSX.Element[] = [];
+          const lineColor = obj.properties?.lineColor || { r: 200, g: 200, b: 200, a: 0.3 };
+          const lineWidth = obj.properties?.lineWidth || 1;
+          const opacity = obj.opacity || 0.3;
+          
+          // Vertical lines
+          for (let i = 0; i <= obj.size.width; i++) {
+            gridLines.push(
+              <Rect
+                key={`grid-v-${i}`}
+                x={x + i * gridCellSize}
+                y={y}
+                width={lineWidth}
+                height={height}
+                fill={`rgba(${lineColor.r}, ${lineColor.g}, ${lineColor.b}, ${opacity})`}
+                listening={false}
+              />
+            );
+          }
+
+          // Horizontal lines
+          for (let i = 0; i <= obj.size.height; i++) {
+            gridLines.push(
+              <Rect
+                key={`grid-h-${i}`}
+                x={x}
+                y={y + i * gridCellSize}
+                width={width}
+                height={lineWidth}
+                fill={`rgba(${lineColor.r}, ${lineColor.g}, ${lineColor.b}, ${opacity})`}
+                listening={false}
+              />
+            );
+          }
+          
+          allObjects.push(
+            <Group key={obj.id}>
+              {gridLines}
+              {/* Selection border for grid object */}
+              {isSelected && (
+                <Rect
+                  x={x}
+                  y={y}
+                  width={width}
+                  height={height}
+                  stroke="#0088ff"
+                  strokeWidth={2}
+                  dash={[5, 5]}
+                  fill="transparent"
+                  objectId={obj.id}
+                />
+              )}
+            </Group>
+          );
+          return;
+        }
 
         // Determine how to render this object
         if (obj.properties?.emoji) {
@@ -198,8 +225,45 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
           // Render room/path shapes
           const fillColor = obj.color ? `rgb(${obj.color.r}, ${obj.color.g}, ${obj.color.b})` : '#cccccc';
           
-          if (obj.properties?.shape?.type === 'organic' && obj.properties?.shape?.points) {
-            // Organic shape - approximate with multiple small rectangles
+          // Check if this is an L-shaped corridor
+          if (obj.properties?.isLShaped && obj.properties?.corridorPoints) {
+            // Render L-shaped corridor as individual cells
+            const pathWidth = obj.properties.width || 2;
+            const corridorRects: JSX.Element[] = [];
+            
+            obj.properties.corridorPoints.forEach((point: { x: number; y: number }, idx: number) => {
+              corridorRects.push(
+                <Rect
+                  key={`${obj.id}-corridor-${idx}`}
+                  x={point.x * gridSize}
+                  y={point.y * gridSize}
+                  width={pathWidth * gridSize}
+                  height={pathWidth * gridSize}
+                  fill={fillColor}
+                  listening={false}
+                />
+              );
+            });
+            
+            allObjects.push(
+              <Group key={obj.id}>
+                {corridorRects}
+                {isSelected && (
+                  <Rect
+                    x={x}
+                    y={y}
+                    width={width}
+                    height={height}
+                    stroke="#0088ff"
+                    strokeWidth={2}
+                    fill="transparent"
+                    objectId={obj.id}
+                  />
+                )}
+              </Group>
+            );
+          } else if (obj.properties?.shape?.type === 'organic' && obj.properties?.shape?.points) {
+            // Organic shape - approximate with circle
             const centerX = x + width / 2;
             const centerY = y + height / 2;
             

@@ -46,7 +46,8 @@ export enum ObjectType {
   HAZARD = 'hazard',
   LIGHT_SOURCE = 'light_source',
   MARKER = 'marker',
-  TEXT_LABEL = 'text_label'
+  TEXT_LABEL = 'text_label',
+  GRID = 'grid'
 }
 
 // Individual map cell/tile
@@ -75,7 +76,7 @@ export interface MapObject {
   opacity?: number;
   isVisible?: boolean;
   isInteractive?: boolean;
-  properties?: Record<string, any>; // Custom properties for specific object types
+  properties?: Record<string, any>; // Custom properties for specific object types (e.g., gridConfig for GRID objects)
 }
 
 // Map layers for organizing different elements
