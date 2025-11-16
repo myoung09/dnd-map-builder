@@ -815,6 +815,67 @@ export class MapGenerationService {
     const pathWidth = options.terrainType === MapTerrainType.FOREST ? 1 : 
                      options.terrainType === MapTerrainType.CAVE ? 2 + Math.floor(this.random() * 2) : 2;
     
+    // For organic terrain types (forest, cave), create truly organic winding paths
+    const isOrganicTerrain = options.terrainType === MapTerrainType.FOREST || 
+                             options.terrainType === MapTerrainType.CAVE;
+    
+    if (isOrganicTerrain) {
+      // Create curved, natural-looking path
+      const pathPoints: (Position & { width?: number })[] = [];
+      const distance = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
+      const numSegments = Math.max(8, Math.floor(distance / 3)); // More segments for smoother curves
+      
+      for (let i = 0; i <= numSegments; i++) {
+        const t = i / numSegments;
+        
+        // Use quadratic bezier curve as base path
+        const midX = (startX + endX) / 2 + (this.random() - 0.5) * distance * 0.3;
+        const midY = (startY + endY) / 2 + (this.random() - 0.5) * distance * 0.3;
+        
+        const bezierX = Math.pow(1-t, 2) * startX + 2 * (1-t) * t * midX + Math.pow(t, 2) * endX;
+        const bezierY = Math.pow(1-t, 2) * startY + 2 * (1-t) * t * midY + Math.pow(t, 2) * endY;
+        
+        // Add random wobble
+        const wobbleX = (this.random() - 0.5) * 2;
+        const wobbleY = (this.random() - 0.5) * 2;
+        
+        const finalX = Math.round(bezierX + wobbleX);
+        const finalY = Math.round(bezierY + wobbleY);
+        
+        // Variable width
+        const widthVariation = this.random() < 0.3 ? (this.random() < 0.5 ? 1 : -1) : 0;
+        
+        pathPoints.push({
+          x: finalX,
+          y: finalY,
+          width: Math.max(1, pathWidth + widthVariation)
+        });
+      }
+      
+      return {
+        id: uuidv4(),
+        type: ObjectType.DECORATION,
+        position: { x: Math.min(startX, endX), y: Math.min(startY, endY) },
+        size: { 
+          width: Math.max(1, Math.abs(endX - startX)), 
+          height: Math.max(1, Math.abs(endY - startY))
+        },
+        name: 'connecting_path',
+        color: colorTheme.pathColor,
+        properties: {
+          pathType: 'organic',
+          width: pathWidth,
+          start: { x: startX, y: startY },
+          end: { x: endX, y: endY },
+          pathPoints, // Organic curved path
+          isOrganic: true
+        },
+        isVisible: true,
+        isInteractive: false
+      };
+    }
+    
+    // For structured terrain types (house, town, dungeon), use L-shaped corridors
     // Create organic-looking corridor with natural variation
     // Store the corridor as a series of points with width variation
     const corridorPoints: (Position & { width?: number })[] = [];

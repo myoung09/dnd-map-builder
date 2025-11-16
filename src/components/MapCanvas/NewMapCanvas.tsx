@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { Stage, Layer, Rect, Group, Text, Circle } from 'react-konva';
+import { Stage, Layer, Rect, Group, Text, Line } from 'react-konva';
 import Konva from 'konva';
 import { DnDMap, ToolType, ViewportState, ToolState } from '../../types/map';
 
@@ -225,8 +225,49 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
           // Render room/path shapes
           const fillColor = obj.color ? `rgb(${obj.color.r}, ${obj.color.g}, ${obj.color.b})` : '#cccccc';
           
-          // Check if this is an L-shaped corridor
-          if (obj.properties?.isLShaped && obj.properties?.corridorPoints) {
+          // Check if this is an organic curved path
+          if (obj.properties?.isOrganic && obj.properties?.pathPoints) {
+            // Render organic path as smooth curve
+            const pathPoints = obj.properties.pathPoints;
+            const pathElements: JSX.Element[] = [];
+            const defaultPathWidth = obj.properties?.width || 2;
+            
+            // Render path as connected circles for smooth organic look
+            pathPoints.forEach((point: { x: number; y: number; width?: number }, idx: number) => {
+              const cellWidth = (point.width || defaultPathWidth) * gridSize;
+              
+              pathElements.push(
+                <Rect
+                  key={`${obj.id}-path-${idx}`}
+                  x={point.x * gridSize - cellWidth / 2}
+                  y={point.y * gridSize - cellWidth / 2}
+                  width={cellWidth}
+                  height={cellWidth}
+                  fill={fillColor}
+                  listening={false}
+                  cornerRadius={cellWidth / 2} // Full rounding for organic feel
+                />
+              );
+            });
+            
+            allObjects.push(
+              <Group key={obj.id}>
+                {pathElements}
+                {isSelected && (
+                  <Rect
+                    x={x}
+                    y={y}
+                    width={width}
+                    height={height}
+                    stroke="#0088ff"
+                    strokeWidth={2}
+                    fill="transparent"
+                    objectId={obj.id}
+                  />
+                )}
+              </Group>
+            );
+          } else if (obj.properties?.isLShaped && obj.properties?.corridorPoints) {
             // Render L-shaped corridor as individual cells with organic variation
             const defaultPathWidth = obj.properties.width || 2;
             const corridorRects: JSX.Element[] = [];
@@ -265,19 +306,26 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
               </Group>
             );
           } else if (obj.properties?.shape?.type === 'organic' && obj.properties?.shape?.points) {
-            // Organic shape - approximate with circle
+            // Organic shape - render as irregular blob using actual points
             const centerX = x + width / 2;
             const centerY = y + height / 2;
             
+            // Convert shape points to absolute coordinates
+            const shapePoints: number[] = [];
+            obj.properties.shape.points.forEach((point: { x: number; y: number }) => {
+              shapePoints.push(centerX + point.x * gridSize);
+              shapePoints.push(centerY + point.y * gridSize);
+            });
+            
             allObjects.push(
-              <Circle
+              <Line
                 key={obj.id}
-                x={centerX}
-                y={centerY}
-                radius={Math.min(width, height) / 2}
+                points={shapePoints}
                 fill={fillColor}
-                stroke={isSelected ? '#0088ff' : '#666666'}
+                stroke={isSelected ? '#0088ff' : fillColor}
                 strokeWidth={isSelected ? 2 : 1}
+                closed={true}
+                tension={0.4} // Smooth curves for organic feel
                 objectId={obj.id}
               />
             );
