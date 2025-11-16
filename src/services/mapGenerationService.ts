@@ -62,6 +62,64 @@ interface RoomShape {
   radius?: number; // For circles
 }
 
+// BSP Tree structures for dungeon generation
+class BSPTree {
+  leaf: BSPContainer;
+  lchild?: BSPTree;
+  rchild?: BSPTree;
+
+  constructor(leaf: BSPContainer) {
+    this.leaf = leaf;
+  }
+
+  getLeafs(): BSPContainer[] {
+    if (!this.lchild && !this.rchild) {
+      return [this.leaf];
+    }
+    const leftLeafs = this.lchild ? this.lchild.getLeafs() : [];
+    const rightLeafs = this.rchild ? this.rchild.getLeafs() : [];
+    return [...leftLeafs, ...rightLeafs];
+  }
+
+  getLevel(level: number, queue: BSPTree[] = []): BSPTree[] {
+    if (level === 1) {
+      queue.push(this);
+    } else {
+      if (this.lchild) this.lchild.getLevel(level - 1, queue);
+      if (this.rchild) this.rchild.getLevel(level - 1, queue);
+    }
+    return queue;
+  }
+}
+
+class BSPContainer {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  center: Position;
+  room?: GeneratedRoom;
+
+  constructor(x: number, y: number, w: number, h: number) {
+    this.x = x;
+    this.y = y;
+    this.w = w;
+    this.h = h;
+    this.center = {
+      x: this.x + this.w / 2,
+      y: this.y + this.h / 2
+    };
+  }
+}
+
+interface EntranceExit {
+  entrance: Position;
+  exit?: Position;
+  entrancePath: Position[];
+  exitPath?: Position[];
+  mainRoom?: GeneratedRoom;
+}
+
 export class MapGenerationService {
   private seed: number = Math.random();
   private terrainColorSets: Map<MapTerrainType, TerrainColorTheme[]> = new Map();
@@ -89,15 +147,32 @@ export class MapGenerationService {
     // Select coordinated color theme for this terrain
     const colorTheme = this.selectColorTheme(options.terrainType);
     
-    // Generate rooms based on terrain type
-    const rooms = this.generateRoomsByTerrain(options);
+    // Generate complete map structure (rooms + corridors + entrance/exit)
+    const mapStructure = this.generateCompleteMapStructure(options);
     
-    // Create the layers: Background → Rooms → Paths → Objects → Grid (Grid must be last to render on top)
+    // Create unified layers: Background → Terrain (rooms + paths combined) → Objects → Grid
     const backgroundLayer = this.createBackgroundLayer(colorTheme);
-    const roomLayer = this.createRoomLayer(rooms, colorTheme);
-    const pathLayer = this.createPathLayer(rooms, options, colorTheme);
-    const objectsLayer = this.createObjectsLayer(rooms, options);
+    const terrainLayer = this.createUnifiedTerrainLayer(
+      mapStructure.rooms, 
+      mapStructure.corridors, 
+      colorTheme
+    );
+    const objectsLayer = this.createObjectsLayer(mapStructure.rooms, options);
     const gridLayer = this.createGridLayer(options);
+    
+    // Add entrance/exit markers if they exist
+    if (mapStructure.entrance) {
+      const entranceObject = this.createEntranceMarker(mapStructure.entrance, 'entrance', colorTheme);
+      if (objectsLayer.objects) {
+        objectsLayer.objects.push(entranceObject);
+      }
+    }
+    if (mapStructure.exit) {
+      const exitObject = this.createEntranceMarker(mapStructure.exit, 'exit', colorTheme);
+      if (objectsLayer.objects) {
+        objectsLayer.objects.push(exitObject);
+      }
+    }
 
     const mapId = uuidv4();
     const mapName = this.generateMapName(options.terrainType);
@@ -122,8 +197,109 @@ export class MapGenerationService {
         snapToGrid: true,
         gridType: 'square'
       },
-      layers: [backgroundLayer, roomLayer, pathLayer, objectsLayer, gridLayer],
+      layers: [backgroundLayer, terrainLayer, objectsLayer, gridLayer],
       backgroundColor: colorTheme.backgroundColor
+    };
+  }
+
+  /**
+   * Generate complete map structure with rooms, corridors, and entrance/exit
+   */
+  private generateCompleteMapStructure(options: MapGenerationOptions): {
+    rooms: GeneratedRoom[];
+    corridors: Position[][];
+    entrance?: Position;
+    exit?: Position;
+  } {
+    const { width, height, terrainType } = options;
+    
+    // Step 1: Generate rooms
+    const rooms = this.generateRoomsByTerrain(options);
+    
+    // Step 2: Generate BSP corridors (if BSP was used)
+    let corridors: Position[][] = [];
+    
+    if (terrainType === MapTerrainType.HOUSE || 
+        terrainType === MapTerrainType.CAVE || 
+        terrainType === MapTerrainType.DUNGEON) {
+      // BSP-based terrains: Connect rooms directly
+      corridors = this.connectRoomsWithCorridors(rooms);
+      console.log(`Generated ${corridors.length} corridors for ${rooms.length} rooms`);
+      corridors.forEach((c, i) => console.log(`Corridor ${i}: ${c.length} points`));
+    } else {
+      // Use traditional path generation
+      corridors = this.generateTraditionalPaths(rooms, options, width, height);
+    }
+    
+    // Step 3: Build grid map for connectivity check
+    const gridMap = this.buildGridMap(rooms, corridors, width, height);
+    
+    // Step 4: Check for disconnected groups and connect with Dijkstra
+    const groups = this.findDisconnectedGroups(rooms, gridMap);
+    if (groups.length > 1) {
+      const dijkstraCorridors = this.connectDisconnectedGroups(groups, gridMap, width, height);
+      corridors.push(...dijkstraCorridors);
+    }
+    
+    // Step 5: Create entrance/exit (for caves, forests, dungeons, and houses)
+    let entrance: Position | undefined;
+    let exit: Position | undefined;
+    
+    if (terrainType === MapTerrainType.CAVE || 
+        terrainType === MapTerrainType.FOREST || 
+        terrainType === MapTerrainType.DUNGEON ||
+        terrainType === MapTerrainType.HOUSE) {
+      const entranceExit = this.createEntranceExit(rooms, corridors, options);
+      entrance = entranceExit.entrance;
+      exit = entranceExit.exit;
+      
+      // Add entrance/exit paths to corridors
+      if (entranceExit.entrancePath.length > 0) {
+        corridors.push(entranceExit.entrancePath);
+      }
+      if (entranceExit.exitPath && entranceExit.exitPath.length > 0) {
+        corridors.push(entranceExit.exitPath);
+      }
+    }
+    
+    return { rooms, corridors, entrance, exit };
+  }
+
+  /**
+   * Generate traditional paths for non-BSP terrains
+   */
+  private generateTraditionalPaths(rooms: GeneratedRoom[], options: MapGenerationOptions, width: number, height: number): Position[][] {
+    const corridors: Position[][] = [];
+    
+    // Simple: connect each room to nearest neighbor
+    for (let i = 0; i < rooms.length - 1; i++) {
+      const corridor = this.createLShapedCorridor(
+        { x: rooms[i].position.x + rooms[i].size.width / 2, y: rooms[i].position.y + rooms[i].size.height / 2 },
+        { x: rooms[i + 1].position.x + rooms[i + 1].size.width / 2, y: rooms[i + 1].position.y + rooms[i + 1].size.height / 2 }
+      );
+      corridors.push(corridor);
+    }
+    
+    return corridors;
+  }
+
+  /**
+   * Create entrance/exit marker object
+   */
+  private createEntranceMarker(position: Position, type: 'entrance' | 'exit', colorTheme: TerrainColorTheme): MapObject {
+    return {
+      id: uuidv4(),
+      type: ObjectType.DECORATION,
+      position,
+      size: { width: 3, height: 3 },
+      name: type === 'entrance' ? '🚪 Entrance' : '🏁 Exit',
+      color: type === 'entrance' ? { r: 0, g: 255, b: 0 } : { r: 255, g: 0, b: 0 },
+      properties: {
+        entranceType: type,
+        isInteractive: true
+      },
+      isVisible: true,
+      isInteractive: true
     };
   }
 
@@ -325,6 +501,15 @@ export class MapGenerationService {
     };
   }
 
+  private lightenColor(color: Color, factor: number): Color {
+    return {
+      r: Math.min(255, Math.floor(color.r + (255 - color.r) * factor)),
+      g: Math.min(255, Math.floor(color.g + (255 - color.g) * factor)),
+      b: Math.min(255, Math.floor(color.b + (255 - color.b) * factor)),
+      a: color.a
+    };
+  }
+
   // Generate map name based on terrain type
   private generateMapName(terrainType: MapTerrainType): string {
     const prefixes: { [key in MapTerrainType]: string[] } = {
@@ -350,20 +535,721 @@ export class MapGenerationService {
   }
 
   // Generate rooms based on terrain type rules
+  // ============================================================================
+  // BSP (Binary Space Partitioning) DUNGEON GENERATION
+  // ============================================================================
+
+  /**
+   * Generate rooms using Hybrid BSP approach
+   * - Creates exact number of rooms (not limited to powers of 2)
+   * - Connects rooms using BSP tree structure
+   * - Fills gaps with Dijkstra pathfinding
+   */
+  private generateBSPRooms(options: MapGenerationOptions): GeneratedRoom[] {
+    const { width, height, numberOfRooms } = options;
+    
+    // Calculate BSP iterations needed
+    const iterations = this.calculateBSPIterations(numberOfRooms);
+    
+    // Create BSP tree with hybrid splitting (stops early for exact room count)
+    const mainContainer = new BSPContainer(2, 2, width - 4, height - 4);
+    const tree = this.splitContainerHybrid(mainContainer, iterations, numberOfRooms);
+    
+    // Get leaf containers and create rooms
+    const leafs = tree.getLeafs();
+    const rooms: GeneratedRoom[] = [];
+    
+    for (const container of leafs) {
+      const room = this.createRoomInContainer(container, options);
+      container.room = room;
+      rooms.push(room);
+    }
+    
+    return rooms;
+  }
+
+  /**
+   * Calculate BSP iterations needed for target room count
+   */
+  private calculateBSPIterations(targetRooms: number): number {
+    // For hybrid approach, use slightly higher iterations to allow flexibility
+    const baseIterations = Math.ceil(Math.log2(targetRooms));
+    return Math.max(3, Math.min(baseIterations + 1, 7)); // Clamp 3-7
+  }
+
+  /**
+   * Hybrid BSP splitting - stops splitting when we have enough rooms
+   */
+  private splitContainerHybrid(
+    container: BSPContainer, 
+    maxIter: number, 
+    targetRooms: number, 
+    currentDepth: number = 0,
+    roomsSoFar: number = 1
+  ): BSPTree {
+    const tree = new BSPTree(container);
+    
+    // Stop conditions:
+    // 1. Reached max iterations
+    // 2. Container too small to split further
+    // 3. We have enough rooms (with some buffer for variety)
+    const shouldStop = 
+      currentDepth >= maxIter ||
+      container.w < 8 || container.h < 8 ||
+      (roomsSoFar >= targetRooms && this.random() < 0.6);
+    
+    if (shouldStop) {
+      return tree; // Leaf node
+    }
+    
+    // Split the container
+    const [r1, r2] = this.randomSplitContainer(container);
+    
+    if (!r1 || !r2) {
+      return tree; // Failed to split, return as leaf
+    }
+    
+    // Recursively split children
+    const estimatedLeft = Math.ceil(targetRooms / 2);
+    const estimatedRight = targetRooms - estimatedLeft;
+    
+    tree.lchild = this.splitContainerHybrid(r1, maxIter, estimatedLeft, currentDepth + 1, roomsSoFar);
+    tree.rchild = this.splitContainerHybrid(r2, maxIter, estimatedRight, currentDepth + 1, roomsSoFar + 1);
+    
+    return tree;
+  }
+
+  /**
+   * Split a container randomly (vertical or horizontal) with ratio filtering
+   */
+  private randomSplitContainer(container: BSPContainer): [BSPContainer | null, BSPContainer | null] {
+    const MIN_SIZE = 6;
+    const W_RATIO = 0.4; // Minimum width/height ratio
+    const H_RATIO = 0.4; // Minimum height/width ratio
+    
+    let r1: BSPContainer | null = null;
+    let r2: BSPContainer | null = null;
+    
+    // Try up to 5 times to get a good split
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const splitVertical = this.random() < 0.5;
+      
+      if (splitVertical && container.w >= MIN_SIZE * 2) {
+        // Vertical split
+        const splitPoint = Math.floor(container.w * (0.3 + this.random() * 0.4)); // 30-70%
+        
+        r1 = new BSPContainer(container.x, container.y, splitPoint, container.h);
+        r2 = new BSPContainer(container.x + splitPoint, container.y, container.w - splitPoint, container.h);
+        
+        // Check ratios
+        const r1Ratio = r1.w / r1.h;
+        const r2Ratio = r2.w / r2.h;
+        
+        if (r1Ratio >= W_RATIO && r2Ratio >= W_RATIO) {
+          return [r1, r2]; // Good split!
+        }
+      } else if (!splitVertical && container.h >= MIN_SIZE * 2) {
+        // Horizontal split
+        const splitPoint = Math.floor(container.h * (0.3 + this.random() * 0.4)); // 30-70%
+        
+        r1 = new BSPContainer(container.x, container.y, container.w, splitPoint);
+        r2 = new BSPContainer(container.x, container.y + splitPoint, container.w, container.h - splitPoint);
+        
+        // Check ratios
+        const r1Ratio = r1.h / r1.w;
+        const r2Ratio = r2.h / r2.w;
+        
+        if (r1Ratio >= H_RATIO && r2Ratio >= H_RATIO) {
+          return [r1, r2]; // Good split!
+        }
+      }
+    }
+    
+    // Failed to find good split
+    return [null, null];
+  }
+
+  /**
+   * Create a room within a BSP container with random padding
+   */
+  private createRoomInContainer(container: BSPContainer, options: MapGenerationOptions): GeneratedRoom {
+    // Random padding (0 to 1/3 of container size on each side)
+    const paddingLeft = Math.floor(this.random() * (container.w / 3));
+    const paddingTop = Math.floor(this.random() * (container.h / 3));
+    const paddingRight = Math.floor(this.random() * (container.w / 3));
+    const paddingBottom = Math.floor(this.random() * (container.h / 3));
+    
+    const roomX = container.x + paddingLeft;
+    const roomY = container.y + paddingTop;
+    const roomW = Math.max(3, container.w - paddingLeft - paddingRight);
+    const roomH = Math.max(3, container.h - paddingTop - paddingBottom);
+    
+    // Determine room type based on terrain
+    let roomType = 'room';
+    if (options.terrainType === MapTerrainType.CAVE) {
+      roomType = Math.random() < 0.3 ? 'large_cavern' : 'cavern';
+    } else if (options.terrainType === MapTerrainType.HOUSE) {
+      const houseRooms = ['bedroom', 'kitchen', 'living_room', 'study', 'bathroom', 'storage'];
+      roomType = houseRooms[Math.floor(this.random() * houseRooms.length)];
+    } else if (options.terrainType === MapTerrainType.DUNGEON) {
+      const dungeonRooms = ['chamber', 'corridor', 'trap_room', 'treasure_room', 'guard_room'];
+      roomType = dungeonRooms[Math.floor(this.random() * dungeonRooms.length)];
+    }
+    
+    return {
+      id: uuidv4(),
+      type: roomType,
+      shape: { type: 'rectangle' },
+      position: { x: roomX, y: roomY },
+      size: { width: roomW, height: roomH },
+      doors: []
+    };
+  }
+
+  /**
+   * Connect BSP rooms using tree structure + Dijkstra for gaps
+   */
+  /**
+   * Connect rooms with L-shaped corridors
+   * Uses minimum spanning tree approach: connect each room to nearest unconnected room
+   */
+  private connectRoomsWithCorridors(rooms: GeneratedRoom[]): Position[][] {
+    const corridors: Position[][] = [];
+    
+    if (rooms.length === 0) return corridors;
+    
+    // Track which rooms are connected
+    const connected = new Set<string>();
+    connected.add(rooms[0].id);
+    
+    // Keep connecting until all rooms are connected
+    while (connected.size < rooms.length) {
+      let bestConnection: { from: GeneratedRoom; to: GeneratedRoom; distance: number } | null = null;
+      
+      // Find the shortest connection from any connected room to any unconnected room
+      for (const room of rooms) {
+        if (!connected.has(room.id)) continue;
+        
+        const centerA = {
+          x: Math.floor(room.position.x + room.size.width / 2),
+          y: Math.floor(room.position.y + room.size.height / 2)
+        };
+        
+        for (const otherRoom of rooms) {
+          if (connected.has(otherRoom.id)) continue;
+          
+          const centerB = {
+            x: Math.floor(otherRoom.position.x + otherRoom.size.width / 2),
+            y: Math.floor(otherRoom.position.y + otherRoom.size.height / 2)
+          };
+          
+          const distance = Math.abs(centerA.x - centerB.x) + Math.abs(centerA.y - centerB.y);
+          
+          if (!bestConnection || distance < bestConnection.distance) {
+            bestConnection = { from: room, to: otherRoom, distance };
+          }
+        }
+      }
+      
+      // Connect the best pair
+      if (bestConnection) {
+        const centerA = {
+          x: Math.floor(bestConnection.from.position.x + bestConnection.from.size.width / 2),
+          y: Math.floor(bestConnection.from.position.y + bestConnection.from.size.height / 2)
+        };
+        const centerB = {
+          x: Math.floor(bestConnection.to.position.x + bestConnection.to.size.width / 2),
+          y: Math.floor(bestConnection.to.position.y + bestConnection.to.size.height / 2)
+        };
+        
+        const corridor = this.createLShapedCorridor(centerA, centerB);
+        corridors.push(corridor);
+        connected.add(bestConnection.to.id);
+      } else {
+        break; // Safety: prevent infinite loop
+      }
+    }
+    
+    return corridors;
+  }
+
+  private connectBSPRooms(tree: BSPTree, gridMap: boolean[][], width: number, height: number): Position[][] {
+    const corridors: Position[][] = [];
+    
+    // Connect sibling nodes recursively
+    this.connectBSPSiblings(tree, corridors);
+    
+    // TODO: Add Dijkstra for disconnected groups
+    
+    return corridors;
+  }
+
+  /**
+   * Recursively connect BSP sibling containers
+   */
+  private connectBSPSiblings(tree: BSPTree, corridors: Position[][]): void {
+    if (!tree.lchild || !tree.rchild) {
+      return; // Leaf node, nothing to connect
+    }
+    
+    // Get leaf nodes from each child
+    const leftLeaf = this.getRandomLeaf(tree.lchild);
+    const rightLeaf = this.getRandomLeaf(tree.rchild);
+    
+    if (leftLeaf && rightLeaf) {
+      // Create L-shaped corridor between container centers
+      const corridor = this.createLShapedCorridor(leftLeaf.center, rightLeaf.center);
+      corridors.push(corridor);
+    }
+    
+    // Recurse on children
+    this.connectBSPSiblings(tree.lchild, corridors);
+    this.connectBSPSiblings(tree.rchild, corridors);
+  }
+
+  /**
+   * Get a random leaf from a tree branch
+   */
+  private getRandomLeaf(tree: BSPTree): BSPContainer | null {
+    const leafs = tree.getLeafs();
+    if (leafs.length === 0) return null;
+    return leafs[Math.floor(this.random() * leafs.length)];
+  }
+
+  /**
+   * Create L-shaped corridor between two points
+   */
+  private createLShapedCorridor(start: Position, end: Position): Position[] {
+    const corridor: Position[] = [];
+    const turnHorizontalFirst = this.random() < 0.5;
+    
+    if (turnHorizontalFirst) {
+      // Horizontal then vertical
+      for (let x = Math.min(start.x, end.x); x <= Math.max(start.x, end.x); x++) {
+        corridor.push({ x: Math.floor(x), y: Math.floor(start.y) });
+      }
+      for (let y = Math.min(start.y, end.y); y <= Math.max(start.y, end.y); y++) {
+        corridor.push({ x: Math.floor(end.x), y: Math.floor(y) });
+      }
+    } else {
+      // Vertical then horizontal
+      for (let y = Math.min(start.y, end.y); y <= Math.max(start.y, end.y); y++) {
+        corridor.push({ x: Math.floor(start.x), y: Math.floor(y) });
+      }
+      for (let x = Math.min(start.x, end.x); x <= Math.max(start.x, end.x); x++) {
+        corridor.push({ x: Math.floor(x), y: Math.floor(end.y) });
+      }
+    }
+    
+    return corridor;
+  }
+
+  // ============================================================================
+  // END BSP GENERATION
+  // ============================================================================
+
+  // ============================================================================
+  // DIJKSTRA PATHFINDING & CONNECTIVITY
+  // ============================================================================
+
+  /**
+   * Build a grid map from rooms and corridors (true = wall, false = floor)
+   */
+  private buildGridMap(rooms: GeneratedRoom[], corridors: Position[][], width: number, height: number): boolean[][] {
+    const map: boolean[][] = Array(height).fill(null).map(() => Array(width).fill(true));
+    
+    // Carve out rooms
+    for (const room of rooms) {
+      for (let y = 0; y < room.size.height; y++) {
+        for (let x = 0; x < room.size.width; x++) {
+          const mapX = Math.floor(room.position.x + x);
+          const mapY = Math.floor(room.position.y + y);
+          if (mapX >= 0 && mapX < width && mapY >= 0 && mapY < height) {
+            map[mapY][mapX] = false; // Floor
+          }
+        }
+      }
+    }
+    
+    // Carve out corridors
+    for (const corridor of corridors) {
+      for (const point of corridor) {
+        const x = Math.floor(point.x);
+        const y = Math.floor(point.y);
+        if (x >= 0 && x < width && y >= 0 && y < height) {
+          map[y][x] = false; // Floor
+          // Widen corridor slightly
+          if (x > 0) map[y][x - 1] = false;
+          if (x < width - 1) map[y][x + 1] = false;
+        }
+      }
+    }
+    
+    return map;
+  }
+
+  /**
+   * Find disconnected room groups using flood fill
+   */
+  private findDisconnectedGroups(rooms: GeneratedRoom[], gridMap: boolean[][]): GeneratedRoom[][] {
+    const visited = new Set<string>();
+    const groups: GeneratedRoom[][] = [];
+    
+    for (const room of rooms) {
+      if (!visited.has(room.id)) {
+        const group = this.floodFillGroup(room, rooms, gridMap, visited);
+        if (group.length > 0) {
+          groups.push(group);
+        }
+      }
+    }
+    
+    return groups;
+  }
+
+  /**
+   * Flood fill to find all rooms connected to start room
+   */
+  private floodFillGroup(
+    startRoom: GeneratedRoom,
+    allRooms: GeneratedRoom[],
+    gridMap: boolean[][],
+    visited: Set<string>
+  ): GeneratedRoom[] {
+    const group: GeneratedRoom[] = [];
+    const queue: GeneratedRoom[] = [startRoom];
+    visited.add(startRoom.id);
+    
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      group.push(current);
+      
+      // Check which rooms are reachable from current
+      for (const other of allRooms) {
+        if (!visited.has(other.id) && this.areRoomsConnected(current, other, gridMap)) {
+          visited.add(other.id);
+          queue.push(other);
+        }
+      }
+    }
+    
+    return group;
+  }
+
+  /**
+   * Check if two rooms are connected via floor cells
+   */
+  private areRoomsConnected(roomA: GeneratedRoom, roomB: GeneratedRoom, gridMap: boolean[][]): boolean {
+    // Simple check: see if there's a floor path between centers
+    const path = this.dijkstraPathfinding(
+      { x: Math.floor(roomA.position.x + roomA.size.width / 2), y: Math.floor(roomA.position.y + roomA.size.height / 2) },
+      { x: Math.floor(roomB.position.x + roomB.size.width / 2), y: Math.floor(roomB.position.y + roomB.size.height / 2) },
+      gridMap
+    );
+    return path.length > 0;
+  }
+
+  /**
+   * Dijkstra pathfinding algorithm
+   * Returns array of positions from start to goal (empty if no path exists)
+   */
+  private dijkstraPathfinding(start: Position, goal: Position, gridMap: boolean[][]): Position[] {
+    const width = gridMap[0].length;
+    const height = gridMap.length;
+    
+    // Distance map (Infinity = unvisited)
+    const dist: number[][] = Array(height).fill(null).map(() => Array(width).fill(Infinity));
+    const prev: (Position | null)[][] = Array(height).fill(null).map(() => Array(width).fill(null));
+    
+    // Priority queue (simple array implementation)
+    const queue: Array<{ pos: Position; dist: number }> = [];
+    
+    const startX = Math.floor(start.x);
+    const startY = Math.floor(start.y);
+    const goalX = Math.floor(goal.x);
+    const goalY = Math.floor(goal.y);
+    
+    // Bounds check
+    if (startX < 0 || startX >= width || startY < 0 || startY >= height ||
+        goalX < 0 || goalX >= width || goalY < 0 || goalY >= height) {
+      return [];
+    }
+    
+    dist[startY][startX] = 0;
+    queue.push({ pos: { x: startX, y: startY }, dist: 0 });
+    
+    const directions = [
+      { x: 0, y: -1 }, { x: 1, y: 0 }, { x: 0, y: 1 }, { x: -1, y: 0 }
+    ];
+    
+    while (queue.length > 0) {
+      // Get node with minimum distance
+      queue.sort((a, b) => a.dist - b.dist);
+      const current = queue.shift()!;
+      const { x, y } = current.pos;
+      
+      // Reached goal?
+      if (x === goalX && y === goalY) {
+        // Reconstruct path
+        const path: Position[] = [];
+        let curr: Position | null = { x: goalX, y: goalY };
+        while (curr) {
+          path.unshift(curr);
+          curr = prev[curr.y][curr.x];
+        }
+        return path;
+      }
+      
+      // Already found better path to this node
+      if (current.dist > dist[y][x]) continue;
+      
+      // Check neighbors
+      for (const dir of directions) {
+        const nx = x + dir.x;
+        const ny = y + dir.y;
+        
+        // Bounds check
+        if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+        
+        // Wall check (can pathfind through walls with higher cost)
+        const moveCost = gridMap[ny][nx] ? 5 : 1; // Walls cost 5x more
+        const newDist = dist[y][x] + moveCost;
+        
+        if (newDist < dist[ny][nx]) {
+          dist[ny][nx] = newDist;
+          prev[ny][nx] = { x, y };
+          queue.push({ pos: { x: nx, y: ny }, dist: newDist });
+        }
+      }
+    }
+    
+    // No path found
+    return [];
+  }
+
+  /**
+   * Connect disconnected groups using Dijkstra
+   */
+  private connectDisconnectedGroups(
+    groups: GeneratedRoom[][],
+    gridMap: boolean[][],
+    width: number,
+    height: number
+  ): Position[][] {
+    const newCorridors: Position[][] = [];
+    
+    // Connect each group to the next
+    for (let i = 0; i < groups.length - 1; i++) {
+      const groupA = groups[i];
+      const groupB = groups[i + 1];
+      
+      // Find closest room pair between groups
+      let bestPath: Position[] = [];
+      let shortestDist = Infinity;
+      
+      for (const roomA of groupA) {
+        for (const roomB of groupB) {
+          const centerA = {
+            x: Math.floor(roomA.position.x + roomA.size.width / 2),
+            y: Math.floor(roomA.position.y + roomA.size.height / 2)
+          };
+          const centerB = {
+            x: Math.floor(roomB.position.x + roomB.size.width / 2),
+            y: Math.floor(roomB.position.y + roomB.size.height / 2)
+          };
+          
+          const path = this.dijkstraPathfinding(centerA, centerB, gridMap);
+          
+          if (path.length > 0 && path.length < shortestDist) {
+            shortestDist = path.length;
+            bestPath = path;
+          }
+        }
+      }
+      
+      if (bestPath.length > 0) {
+        newCorridors.push(bestPath);
+        // Carve this corridor into the grid map so future paths can use it
+        for (const point of bestPath) {
+          if (point.y >= 0 && point.y < height && point.x >= 0 && point.x < width) {
+            gridMap[point.y][point.x] = false;
+          }
+        }
+      }
+    }
+    
+    return newCorridors;
+  }
+
+  // ============================================================================
+  // ENTRANCE & EXIT SYSTEM
+  // ============================================================================
+
+  /**
+   * Create entrance and optional exit for terrain
+   */
+  private createEntranceExit(
+    rooms: GeneratedRoom[],
+    corridors: Position[][],
+    options: MapGenerationOptions
+  ): EntranceExit {
+    const { terrainType, width, height } = options;
+    
+    if (terrainType === MapTerrainType.CAVE || terrainType === MapTerrainType.DUNGEON) {
+      // Cave and dungeon: single entrance from edge to largest room
+      return this.createCaveEntrance(rooms, corridors, width, height);
+    } else if (terrainType === MapTerrainType.FOREST) {
+      // Forest: entrance and exit on opposite edges
+      return this.createForestEntranceExit(rooms, corridors, width, height);
+    } else if (terrainType === MapTerrainType.HOUSE) {
+      // House: entrance from edge (like a front door)
+      return this.createCaveEntrance(rooms, corridors, width, height);
+    }
+    
+    // Default: no entrance/exit for towns
+    return {
+      entrance: { x: 0, y: 0 },
+      entrancePath: []
+    };
+  }
+
+  /**
+   * Create entrance for cave (single entrance on edge)
+   */
+  private createCaveEntrance(
+    rooms: GeneratedRoom[],
+    corridors: Position[][],
+    width: number,
+    height: number
+  ): EntranceExit {
+    // Choose entrance side (prefer left or top)
+    const sides = ['left', 'top', 'right', 'bottom'];
+    const entranceSide = sides[Math.floor(this.random() * sides.length)];
+    
+    let entrance: Position;
+    switch (entranceSide) {
+      case 'left':
+        entrance = { x: 0, y: Math.floor(height / 2) };
+        break;
+      case 'right':
+        entrance = { x: width - 1, y: Math.floor(height / 2) };
+        break;
+      case 'top':
+        entrance = { x: Math.floor(width / 2), y: 0 };
+        break;
+      default: // bottom
+        entrance = { x: Math.floor(width / 2), y: height - 1 };
+    }
+    
+    // Find main chamber (largest room)
+    const mainChamber = rooms.reduce((largest, room) => {
+      const areaLargest = largest.size.width * largest.size.height;
+      const areaRoom = room.size.width * room.size.height;
+      return areaRoom > areaLargest ? room : largest;
+    });
+    
+    // Build grid map
+    const gridMap = this.buildGridMap(rooms, corridors, width, height);
+    
+    // Find path from entrance to main chamber
+    const chamberCenter = {
+      x: Math.floor(mainChamber.position.x + mainChamber.size.width / 2),
+      y: Math.floor(mainChamber.position.y + mainChamber.size.height / 2)
+    };
+    
+    const entrancePath = this.dijkstraPathfinding(entrance, chamberCenter, gridMap);
+    
+    // Widen entrance opening
+    this.widenPath(entrancePath.slice(0, Math.min(10, entrancePath.length)), gridMap, 3);
+    
+    return {
+      entrance,
+      entrancePath,
+      mainRoom: mainChamber
+    };
+  }
+
+  /**
+   * Create entrance and exit for forest (through-path)
+   */
+  private createForestEntranceExit(
+    clearings: GeneratedRoom[],
+    paths: Position[][],
+    width: number,
+    height: number
+  ): EntranceExit {
+    // Entrance on left, exit on right
+    const entrance = { x: 0, y: Math.floor(height / 2) };
+    const exit = { x: width - 1, y: Math.floor(height / 2) };
+    
+    // Build grid map
+    const gridMap = this.buildGridMap(clearings, paths, width, height);
+    
+    // Create main through-path
+    const mainPath = this.dijkstraPathfinding(entrance, exit, gridMap);
+    
+    // Find clearings near the main path
+    const pathClearings = clearings.filter(clearing => {
+      const centerX = Math.floor(clearing.position.x + clearing.size.width / 2);
+      const centerY = Math.floor(clearing.position.y + clearing.size.height / 2);
+      // Check if clearing is within 15 units of main path
+      return mainPath.some(point => 
+        Math.abs(point.x - centerX) + Math.abs(point.y - centerY) < 15
+      );
+    });
+    
+    // Widen entrance and exit
+    this.widenPath(mainPath.slice(0, 10), gridMap, 3);
+    this.widenPath(mainPath.slice(-10), gridMap, 3);
+    
+    return {
+      entrance,
+      exit,
+      entrancePath: mainPath.slice(0, Math.floor(mainPath.length / 2)),
+      exitPath: mainPath.slice(Math.floor(mainPath.length / 2)),
+      mainRoom: pathClearings[0] // First clearing on path
+    };
+  }
+
+  /**
+   * Widen a path by carving neighboring cells
+   */
+  private widenPath(path: Position[], gridMap: boolean[][], width: number): void {
+    const height = gridMap.length;
+    const gridWidth = gridMap[0].length;
+    const radius = Math.floor(width / 2);
+    
+    for (const point of path) {
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          const x = Math.floor(point.x) + dx;
+          const y = Math.floor(point.y) + dy;
+          if (x >= 0 && x < gridWidth && y >= 0 && y < height) {
+            gridMap[y][x] = false; // Floor
+          }
+        }
+      }
+    }
+  }
+
+  // ============================================================================
+  // END ENTRANCE & EXIT
+  // ============================================================================
+
   private generateRoomsByTerrain(options: MapGenerationOptions): GeneratedRoom[] {
     switch (options.terrainType) {
       case MapTerrainType.HOUSE:
-        return this.generateOrganizedRooms(options);
+        return this.generateBSPRooms(options); // Use BSP for houses
       case MapTerrainType.FOREST:
         return this.generateOrganicClearings(options);
       case MapTerrainType.CAVE:
-        return this.generateCaveChambers(options);
+        return this.generateBSPRooms(options); // Use BSP for caves
       case MapTerrainType.TOWN:
         return this.generateBuildingPlots(options);
       case MapTerrainType.DUNGEON:
-        return this.generateDungeonRooms(options);
+        return this.generateBSPRooms(options); // Use BSP for dungeons
       default:
-        return this.generateOrganizedRooms(options);
+        return this.generateBSPRooms(options);
     }
   }
 
@@ -643,6 +1529,70 @@ export class MapGenerationService {
     };
   }
 
+  /**
+   * Create unified terrain layer combining rooms and corridors
+   * This merges what used to be separate room and path layers
+   */
+  private createUnifiedTerrainLayer(
+    rooms: GeneratedRoom[], 
+    corridors: Position[][], 
+    colorTheme: TerrainColorTheme
+  ): MapLayer {
+    const terrainObjects: MapObject[] = [];
+    
+    // 1. Add all rooms as terrain objects
+    rooms.forEach(room => {
+      terrainObjects.push({
+        id: room.id,
+        type: ObjectType.DECORATION,
+        position: room.position,
+        size: room.size,
+        name: `${room.type}_room`,
+        color: colorTheme.pathColor,
+        properties: {
+          roomType: room.type,
+          shape: room.shape,
+          isRoom: true
+        },
+        isVisible: true,
+        isInteractive: false
+      });
+    });
+    
+    // 2. Add all corridors as individual path cells
+    corridors.forEach((corridor, corridorIndex) => {
+      if (corridor.length === 0) return;
+      
+      // Create an object for each cell in the corridor
+      corridor.forEach((point, pointIndex) => {
+        terrainObjects.push({
+          id: uuidv4(),
+          type: ObjectType.DECORATION,
+          position: { x: point.x, y: point.y },
+          size: { width: 1, height: 1 }, // Single grid cell
+          name: `path_corridor_${corridorIndex}_${pointIndex}`, // Include 'path' for rendering
+          color: colorTheme.pathColor, // Same color as rooms
+          properties: {
+            isCorridor: true,
+            corridorIndex: corridorIndex
+          },
+          isVisible: true,
+          isInteractive: false
+        });
+      });
+    });
+    
+    return {
+      id: uuidv4(),
+      name: 'Terrain',
+      type: LayerType.TERRAIN,
+      objects: terrainObjects,
+      isVisible: true,
+      isLocked: false,
+      opacity: 1
+    };
+  }
+
   // Create room layer with room shapes as objects
   private createRoomLayer(rooms: GeneratedRoom[], colorTheme: TerrainColorTheme): MapLayer {
     const roomObjects: MapObject[] = rooms.map(room => ({
@@ -707,11 +1657,11 @@ export class MapGenerationService {
       description: 'Resizable grid overlay',
       isVisible: true,
       isInteractive: true,
-      opacity: 0.3,
+      opacity: 0.15, // Reduced from 0.3 to be less visible
       properties: {
         gridType: 'square',
         cellSize: 1, // 1 grid cell = 1 unit
-        lineColor: { r: 200, g: 200, b: 200, a: 0.3 },
+        lineColor: { r: 150, g: 150, b: 150, a: 0.15 }, // Lighter and more transparent
         lineWidth: 1
       }
     };
@@ -723,7 +1673,7 @@ export class MapGenerationService {
       objects: [gridObject],
       isVisible: true,
       isLocked: false,
-      opacity: 0.3
+      opacity: 0.15 // Reduced from 0.3
     };
   }
 

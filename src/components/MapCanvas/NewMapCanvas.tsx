@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Stage, Layer, Rect, Group, Text, Line } from 'react-konva';
 import Konva from 'konva';
 import { DnDMap, ToolType, ViewportState, ToolState } from '../../types/map';
@@ -6,8 +6,6 @@ import { DnDMap, ToolType, ViewportState, ToolState } from '../../types/map';
 interface MapCanvasProps {
   map: DnDMap;
   onMapChange: (map: DnDMap) => void;
-  width: number;
-  height: number;
   viewport: ViewportState;
   onViewportChange: (viewport: ViewportState) => void;
   toolState: ToolState;
@@ -20,8 +18,6 @@ interface MapCanvasProps {
 const NewMapCanvas: React.FC<MapCanvasProps> = ({ 
   map,
   onMapChange,
-  width, 
-  height,
   viewport,
   onViewportChange,
   toolState,
@@ -31,7 +27,26 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
   gridSize = 32
 }) => {
   const stageRef = useRef<Konva.Stage>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+
+  // Handle dynamic canvas resizing
+  useEffect(() => {
+    const updateSize = () => {
+      if (containerRef.current) {
+        setDimensions({
+          width: containerRef.current.offsetWidth,
+          height: containerRef.current.offsetHeight
+        });
+      }
+    };
+
+    updateSize();
+    window.addEventListener('resize', updateSize);
+    
+    return () => window.removeEventListener('resize', updateSize);
+  }, []);
 
   // Handle stage drag for panning
   const handleStageDragStart = useCallback(() => {
@@ -96,6 +111,28 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
     return null;
   };
 
+  // Build a set of terrain cells (rooms and paths)
+  const getTerrainCells = (): Set<string> => {
+    const terrainCells = new Set<string>();
+    
+    map.layers.forEach(layer => {
+      if (layer.type === 'terrain' && layer.isVisible && layer.objects) {
+        layer.objects.forEach(obj => {
+          // Add all cells occupied by this object
+          for (let dy = 0; dy < obj.size.height; dy++) {
+            for (let dx = 0; dx < obj.size.width; dx++) {
+              const cellX = obj.position.x + dx;
+              const cellY = obj.position.y + dy;
+              terrainCells.add(`${cellX},${cellY}`);
+            }
+          }
+        });
+      }
+    });
+    
+    return terrainCells;
+  };
+
   // Render map objects
   const renderObjects = () => {
     const allObjects: JSX.Element[] = [];
@@ -112,41 +149,73 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
 
         // Handle grid objects specially
         if (obj.type === 'grid') {
-          const gridCellSize = (obj.properties?.cellSize || 1) * gridSize;
           const gridLines: JSX.Element[] = [];
           const lineColor = obj.properties?.lineColor || { r: 200, g: 200, b: 200, a: 0.3 };
           const lineWidth = obj.properties?.lineWidth || 1;
           const opacity = obj.opacity || 0.3;
           
-          // Vertical lines
-          for (let i = 0; i <= obj.size.width; i++) {
+          // Get terrain cells to only draw grid over them
+          const terrainCells = getTerrainCells();
+          
+          // Draw grid lines only over terrain cells
+          // For each terrain cell, draw its borders
+          terrainCells.forEach(cellKey => {
+            const [cellX, cellY] = cellKey.split(',').map(Number);
+            const cellScreenX = cellX * gridSize;
+            const cellScreenY = cellY * gridSize;
+            
+            // Top border
             gridLines.push(
               <Rect
-                key={`grid-v-${i}`}
-                x={x + i * gridCellSize}
-                y={y}
-                width={lineWidth}
-                height={height}
-                fill={`rgba(${lineColor.r}, ${lineColor.g}, ${lineColor.b}, ${opacity})`}
-                listening={false}
-              />
-            );
-          }
-
-          // Horizontal lines
-          for (let i = 0; i <= obj.size.height; i++) {
-            gridLines.push(
-              <Rect
-                key={`grid-h-${i}`}
-                x={x}
-                y={y + i * gridCellSize}
-                width={width}
+                key={`grid-t-${cellX}-${cellY}`}
+                x={cellScreenX}
+                y={cellScreenY}
+                width={gridSize}
                 height={lineWidth}
                 fill={`rgba(${lineColor.r}, ${lineColor.g}, ${lineColor.b}, ${opacity})`}
                 listening={false}
               />
             );
-          }
+            
+            // Left border
+            gridLines.push(
+              <Rect
+                key={`grid-l-${cellX}-${cellY}`}
+                x={cellScreenX}
+                y={cellScreenY}
+                width={lineWidth}
+                height={gridSize}
+                fill={`rgba(${lineColor.r}, ${lineColor.g}, ${lineColor.b}, ${opacity})`}
+                listening={false}
+              />
+            );
+            
+            // Right border
+            gridLines.push(
+              <Rect
+                key={`grid-r-${cellX}-${cellY}`}
+                x={cellScreenX + gridSize - lineWidth}
+                y={cellScreenY}
+                width={lineWidth}
+                height={gridSize}
+                fill={`rgba(${lineColor.r}, ${lineColor.g}, ${lineColor.b}, ${opacity})`}
+                listening={false}
+              />
+            );
+            
+            // Bottom border
+            gridLines.push(
+              <Rect
+                key={`grid-b-${cellX}-${cellY}`}
+                x={cellScreenX}
+                y={cellScreenY + gridSize - lineWidth}
+                width={gridSize}
+                height={lineWidth}
+                fill={`rgba(${lineColor.r}, ${lineColor.g}, ${lineColor.b}, ${opacity})`}
+                listening={false}
+              />
+            );
+          });
           
           allObjects.push(
             <Group key={obj.id}>
@@ -328,6 +397,9 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
             );
           } else {
             // Regular rectangular shape
+            // Corridors should have no stroke to avoid grid lines
+            const isCorridor = obj.properties?.isCorridor === true;
+            
             allObjects.push(
               <Rect
                 key={obj.id}
@@ -336,10 +408,11 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
                 width={width}
                 height={height}
                 fill={fillColor}
-                stroke={isSelected ? '#0088ff' : '#666666'}
-                strokeWidth={isSelected ? 2 : 1}
+                stroke={isSelected ? '#0088ff' : (isCorridor ? undefined : '#666666')}
+                strokeWidth={isSelected ? 2 : (isCorridor ? 0 : 1)}
                 cornerRadius={obj.name.includes('room') ? 4 : 0}
                 objectId={obj.id}
+                perfectDrawEnabled={false}
               />
             );
           }
@@ -351,11 +424,20 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
   };
 
   return (
-    <div style={{ border: '1px solid #ccc', backgroundColor: '#f5f5f5' }}>
+    <div 
+      ref={containerRef}
+      style={{ 
+        width: '100%', 
+        height: '100%', 
+        border: '1px solid #ccc', 
+        backgroundColor: '#f5f5f5',
+        overflow: 'hidden'
+      }}
+    >
       <Stage
         ref={stageRef}
-        width={width}
-        height={height}
+        width={dimensions.width}
+        height={dimensions.height}
         x={viewport.position.x}
         y={viewport.position.y}
         scaleX={viewport.zoom}
@@ -369,11 +451,11 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
           {/* Background */}
           {renderBackground()}
           
-          {/* Grid */}
-          {renderGrid()}
-          
           {/* Objects (rooms, paths, items) */}
           {renderObjects()}
+          
+          {/* Grid - render last so it appears on top */}
+          {renderGrid()}
         </Layer>
       </Stage>
     </div>

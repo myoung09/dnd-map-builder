@@ -868,12 +868,10 @@ function App() {
           )}
 
           {/* Map Canvas */}
-          <Box sx={{ flex: 1, position: 'relative' }}>
+          <Box sx={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
             <NewMapCanvas
               map={currentMap}
               onMapChange={handleMapChange}
-              width={800}
-              height={600}
               viewport={viewportState}
               onViewportChange={handleViewportChange}
               toolState={toolState}
