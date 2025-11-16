@@ -59,14 +59,16 @@ const Toolbar: React.FC<ToolbarProps> = ({
   ];
 
   const terrainTypes = [
-    { type: TerrainType.WALL, name: 'Wall' },
-    { type: TerrainType.FLOOR, name: 'Floor' },
-    { type: TerrainType.DOOR, name: 'Door' },
-    { type: TerrainType.WATER, name: 'Water' },
-    { type: TerrainType.GRASS, name: 'Grass' },
-    { type: TerrainType.STONE, name: 'Stone' },
-    { type: TerrainType.DIRT, name: 'Dirt' },
-    { type: TerrainType.SAND, name: 'Sand' }
+    { type: TerrainType.WALL, name: 'Wall', icon: '🧱' },
+    { type: TerrainType.FLOOR, name: 'Floor', icon: '⬜' },
+    { type: TerrainType.DOOR, name: 'Door', icon: '🚪' },
+    { type: TerrainType.WATER, name: 'Water', icon: '💧' },
+    { type: TerrainType.GRASS, name: 'Grass', icon: '🌱' },
+    { type: TerrainType.STONE, name: 'Stone', icon: '🗿' },
+    { type: TerrainType.DIRT, name: 'Dirt', icon: '🟤' },
+    { type: TerrainType.SAND, name: 'Sand', icon: '🏜️' },
+    { type: TerrainType.DIFFICULT_TERRAIN, name: 'Forest', icon: '🌲' },
+    { type: TerrainType.TRAP, name: 'Trap', icon: '⚠️' }
   ];
 
   const handleTerrainSelect = (terrainType: TerrainType) => {
@@ -146,26 +148,35 @@ const Toolbar: React.FC<ToolbarProps> = ({
       </Typography>
       
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, width: '100%', px: 0.5 }}>
-        {terrainTypes.map(({ type, name }) => {
+        {terrainTypes.map(({ type, name, icon }) => {
           const color = DEFAULT_TERRAIN_COLORS[type];
           return (
             <Tooltip key={type} title={name} placement="right">
               <Box
                 onClick={() => handleTerrainSelect(type)}
                 sx={{
-                  width: 32,
-                  height: 32,
-                  backgroundColor: `rgba(${color.r}, ${color.g}, ${color.b}, 1)`,
+                  width: 36,
+                  height: 36,
+                  backgroundColor: `rgba(${color.r}, ${color.g}, ${color.b}, 0.8)`,
                   border: selectedTerrainType === type ? 2 : 1,
                   borderColor: selectedTerrainType === type ? 'primary.main' : 'divider',
                   borderRadius: 1,
                   cursor: 'pointer',
                   margin: '0 auto',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '18px',
                   '&:hover': {
-                    borderColor: 'primary.main'
-                  }
+                    borderColor: 'primary.main',
+                    backgroundColor: `rgba(${color.r}, ${color.g}, ${color.b}, 1)`,
+                    transform: 'scale(1.05)'
+                  },
+                  transition: 'all 0.2s ease-in-out'
                 }}
-              />
+              >
+                {icon}
+              </Box>
             </Tooltip>
           );
         })}

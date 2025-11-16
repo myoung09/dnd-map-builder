@@ -1,8 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Stage, Layer, Rect, Circle, Line, Group } from 'react-konva';
+import { Stage, Layer, Rect, Line, Group, Text, Path } from 'react-konva';
 import Konva from 'konva';
-import { DnDMap, Position, ToolType, TerrainType, ObjectType, ViewportState, ToolState, MapObject } from '../../types/map';
-import { DEFAULT_TERRAIN_COLORS } from '../../utils/mapUtils';
+import { DnDMap, Position, ToolType, TerrainType, ViewportState, ToolState, MapObject, ObjectType, LayerType } from '../../types/map';
 import { mapEditingService, BrushOptions, PaintOptions, ObjectPlacementOptions } from '../../services/mapEditingService';
 
 interface MapCanvasProps {
@@ -287,69 +286,326 @@ const MapCanvas: React.FC<MapCanvasProps> = ({
     return lines;
   };
 
+  // Get terrain display for rendering (matching legend icons)
+  const getTerrainDisplay = (terrainType: TerrainType | ObjectType, environmentType: string = 'dungeon') => {
+    const terrainDisplays: Record<string, Record<TerrainType | ObjectType, { icon: string; backgroundColor: string; borderRadius?: number; isOrganic?: boolean }>> = {
+      dungeon: {
+        [TerrainType.WALL]: { icon: '🧱', backgroundColor: '#37474f', isOrganic: true },
+        [TerrainType.FLOOR]: { icon: '⬜', backgroundColor: '#eceff1', isOrganic: true },
+        [TerrainType.DOOR]: { icon: '🚪', backgroundColor: '#6d4c41' },
+        [TerrainType.WATER]: { icon: '💧', backgroundColor: '#1976d2', isOrganic: true },
+        [TerrainType.GRASS]: { icon: '🌱', backgroundColor: '#8bc34a', isOrganic: true },
+        [TerrainType.STONE]: { icon: '🗿', backgroundColor: '#616161', isOrganic: true },
+        [TerrainType.DIRT]: { icon: '🟤', backgroundColor: '#8d6e63', isOrganic: true },
+        [TerrainType.SAND]: { icon: '🏜️', backgroundColor: '#ffcc02', isOrganic: true },
+        [TerrainType.LAVA]: { icon: '🌋', backgroundColor: '#f44336', isOrganic: true },
+        [TerrainType.ICE]: { icon: '🧊', backgroundColor: '#00bcd4', isOrganic: true },
+        [TerrainType.WOOD]: { icon: '🪵', backgroundColor: '#795548' },
+        [TerrainType.METAL]: { icon: '⚙️', backgroundColor: '#607d8b' },
+        [TerrainType.TRAP]: { icon: '⚠️', backgroundColor: '#ff9800' },
+        [TerrainType.DIFFICULT_TERRAIN]: { icon: '🌲', backgroundColor: '#1b5e20', isOrganic: true },
+        [TerrainType.IMPASSABLE]: { icon: '⛔', backgroundColor: '#424242' },
+        // Objects
+        [ObjectType.FURNITURE]: { icon: '🪑', backgroundColor: '#8b4513' },
+        [ObjectType.DECORATION]: { icon: '🎨', backgroundColor: '#ddd' },
+        [ObjectType.INTERACTIVE]: { icon: '🔧', backgroundColor: '#95a5a6' },
+        [ObjectType.CREATURE]: { icon: '🐲', backgroundColor: '#e74c3c' },
+        [ObjectType.TREASURE]: { icon: '💰', backgroundColor: '#f1c40f' },
+        [ObjectType.HAZARD]: { icon: '⚡', backgroundColor: '#e67e22' },
+        [ObjectType.LIGHT_SOURCE]: { icon: '💡', backgroundColor: '#f39c12' },
+        [ObjectType.MARKER]: { icon: '📍', backgroundColor: '#9b59b6' },
+        [ObjectType.TEXT_LABEL]: { icon: '📝', backgroundColor: '#34495e' }
+      },
+      forest: {
+        [TerrainType.DIFFICULT_TERRAIN]: { icon: '🌲', backgroundColor: '#1b5e20', isOrganic: true },
+        [TerrainType.FLOOR]: { icon: '🌿', backgroundColor: '#66bb6a', isOrganic: true },
+        [TerrainType.GRASS]: { icon: '🌱', backgroundColor: '#8bc34a', isOrganic: true },
+        [TerrainType.WALL]: { icon: '🪨', backgroundColor: '#37474f', isOrganic: true },
+        [TerrainType.DOOR]: { icon: '🚪', backgroundColor: '#6d4c41' },
+        [TerrainType.WATER]: { icon: '🏞️', backgroundColor: '#1976d2', isOrganic: true },
+        [TerrainType.STONE]: { icon: '🗿', backgroundColor: '#616161', isOrganic: true },
+        [TerrainType.DIRT]: { icon: '🟤', backgroundColor: '#8d6e63', isOrganic: true },
+        [TerrainType.SAND]: { icon: '🏜️', backgroundColor: '#ffcc02', isOrganic: true },
+        [TerrainType.LAVA]: { icon: '🌋', backgroundColor: '#f44336', isOrganic: true },
+        [TerrainType.ICE]: { icon: '🧊', backgroundColor: '#00bcd4', isOrganic: true },
+        [TerrainType.WOOD]: { icon: '🪵', backgroundColor: '#795548' },
+        [TerrainType.METAL]: { icon: '⚙️', backgroundColor: '#607d8b' },
+        [TerrainType.TRAP]: { icon: '⚠️', backgroundColor: '#ff9800' },
+        [TerrainType.IMPASSABLE]: { icon: '⛔', backgroundColor: '#424242' },
+        // Objects
+        [ObjectType.FURNITURE]: { icon: '🏕️', backgroundColor: '#8b4513' },
+        [ObjectType.DECORATION]: { icon: '🌺', backgroundColor: '#ddd' },
+        [ObjectType.INTERACTIVE]: { icon: '🔧', backgroundColor: '#95a5a6' },
+        [ObjectType.CREATURE]: { icon: '🦌', backgroundColor: '#8bc34a' },
+        [ObjectType.TREASURE]: { icon: '🎁', backgroundColor: '#f1c40f' },
+        [ObjectType.HAZARD]: { icon: '🕷️', backgroundColor: '#e67e22' },
+        [ObjectType.LIGHT_SOURCE]: { icon: '🔥', backgroundColor: '#f39c12' },
+        [ObjectType.MARKER]: { icon: '🌳', backgroundColor: '#27ae60' },
+        [ObjectType.TEXT_LABEL]: { icon: '🏷️', backgroundColor: '#34495e' }
+      },
+      tavern: {
+        [TerrainType.WALL]: { icon: '🪵', backgroundColor: '#3e2723' },
+        [TerrainType.FLOOR]: { icon: '🪵', backgroundColor: '#bcaaa4', isOrganic: true },
+        [TerrainType.DOOR]: { icon: '🚪', backgroundColor: '#6d4c41' },
+        [TerrainType.WATER]: { icon: '💧', backgroundColor: '#1976d2', isOrganic: true },
+        [TerrainType.GRASS]: { icon: '🌱', backgroundColor: '#8bc34a', isOrganic: true },
+        [TerrainType.STONE]: { icon: '🗿', backgroundColor: '#616161', isOrganic: true },
+        [TerrainType.DIRT]: { icon: '🟤', backgroundColor: '#8d6e63', isOrganic: true },
+        [TerrainType.SAND]: { icon: '🏜️', backgroundColor: '#ffcc02', isOrganic: true },
+        [TerrainType.LAVA]: { icon: '🌋', backgroundColor: '#f44336', isOrganic: true },
+        [TerrainType.ICE]: { icon: '🧊', backgroundColor: '#00bcd4', isOrganic: true },
+        [TerrainType.WOOD]: { icon: '🪵', backgroundColor: '#795548' },
+        [TerrainType.METAL]: { icon: '⚙️', backgroundColor: '#607d8b' },
+        [TerrainType.TRAP]: { icon: '⚠️', backgroundColor: '#ff9800' },
+        [TerrainType.DIFFICULT_TERRAIN]: { icon: '🌲', backgroundColor: '#1b5e20', isOrganic: true },
+        [TerrainType.IMPASSABLE]: { icon: '⛔', backgroundColor: '#424242' },
+        // Objects
+        [ObjectType.FURNITURE]: { icon: '🍺', backgroundColor: '#8b4513' },
+        [ObjectType.DECORATION]: { icon: '🖼️', backgroundColor: '#ddd' },
+        [ObjectType.INTERACTIVE]: { icon: '🔔', backgroundColor: '#95a5a6' },
+        [ObjectType.CREATURE]: { icon: '👨‍🍳', backgroundColor: '#e74c3c' },
+        [ObjectType.TREASURE]: { icon: '🪙', backgroundColor: '#f1c40f' },
+        [ObjectType.HAZARD]: { icon: '🔥', backgroundColor: '#e67e22' },
+        [ObjectType.LIGHT_SOURCE]: { icon: '🕯️', backgroundColor: '#f39c12' },
+        [ObjectType.MARKER]: { icon: '🏠', backgroundColor: '#9b59b6' },
+        [ObjectType.TEXT_LABEL]: { icon: '📋', backgroundColor: '#34495e' }
+      }
+    };
+
+    const envDisplay = terrainDisplays[environmentType] || terrainDisplays.dungeon;
+    return envDisplay[terrainType] || { icon: '❓', backgroundColor: '#666666' };
+  };
+
+  // Get environment type from map (simplified version)
+  const getMapEnvironmentType = () => {
+    const tags = map.metadata.tags || [];
+    const environmentTags = ['dungeon', 'forest', 'tavern', 'home', 'temple', 'city'];
+    for (const tag of tags) {
+      if (environmentTags.includes(tag.toLowerCase())) {
+        return tag.toLowerCase();
+      }
+    }
+    return 'dungeon'; // default
+  };
+
+  // Generate organic path for natural terrain
+  const generateOrganicPath = (x: number, y: number, size: number) => {
+    const variance = size * 0.15; // 15% variance for organic shape
+    const points = [];
+    
+    // Generate points around the perimeter with slight random variations
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * 2 * Math.PI;
+      const baseX = x + size / 2 + Math.cos(angle) * (size / 2);
+      const baseY = y + size / 2 + Math.sin(angle) * (size / 2);
+      
+      // Add slight random variation (deterministic based on position)
+      const seedX = (x * 1234 + y * 5678) % 1000;
+      const seedY = (y * 9012 + x * 3456) % 1000;
+      const offsetX = (Math.sin(seedX + i) * variance) - (variance / 2);
+      const offsetY = (Math.cos(seedY + i) * variance) - (variance / 2);
+      
+      points.push([baseX + offsetX, baseY + offsetY]);
+    }
+    
+    // Create smooth path using bezier curves
+    let path = `M ${points[0][0]} ${points[0][1]}`;
+    for (let i = 1; i < points.length; i++) {
+      const curr = points[i];
+      const next = points[(i + 1) % points.length];
+      const controlX = (curr[0] + next[0]) / 2;
+      const controlY = (curr[1] + next[1]) / 2;
+      path += ` Q ${curr[0]} ${curr[1]} ${controlX} ${controlY}`;
+    }
+    path += ' Z';
+    
+    return path;
+  };
+
   // Render terrain tiles for a specific layer
   const renderTerrainLayer = (layer: any) => {
     if (!layer.tiles || !layer.isVisible) return null;
+    
+    const environmentType = getMapEnvironmentType();
 
-    return layer.tiles.map((tile: any, index: number) => (
-      <Rect
-        key={`tile-${layer.id}-${index}`}
-        x={tile.position.x * gridSize}
-        y={tile.position.y * gridSize}
-        width={gridSize}
-        height={gridSize}
-        fill={tile.color ? `rgb(${tile.color.r}, ${tile.color.g}, ${tile.color.b})` : '#666666'}
-        stroke="#222"
-        strokeWidth={0.5}
-        opacity={layer.opacity || 1}
-      />
-    ));
-  };
-
-  // Render objects for a specific layer
-  const renderObjectsLayer = (layer: any) => {
-    if (!layer.objects || !layer.isVisible) return null;
-
-    return layer.objects.map((obj: MapObject) => {
-      const isSelected = selectedObjects.includes(obj.id);
+    return layer.tiles.map((tile: any, index: number) => {
+      const terrainDisplay = getTerrainDisplay(tile.terrainType, environmentType);
+      const x = tile.position.x * gridSize;
+      const y = tile.position.y * gridSize;
+      
+      // Create organic shapes for certain terrain types
+      const useOrganicShape = terrainDisplay.isOrganic && gridSize > 20;
       
       return (
-        <Group key={`object-${obj.id}`} opacity={layer.opacity || 1}>
-          <Rect
-            x={obj.position.x * gridSize}
-            y={obj.position.y * gridSize}
-            width={obj.size.width * gridSize}
-            height={obj.size.height * gridSize}
-            fill={obj.color ? `rgb(${obj.color.r}, ${obj.color.g}, ${obj.color.b})` : '#8B4513'}
-            stroke={isSelected ? "#00ff00" : "#666"}
-            strokeWidth={isSelected ? 2 : 1}
-            opacity={0.8}
-          />
-          {/* Object type indicator */}
-          <Circle
-            x={obj.position.x * gridSize + 8}
-            y={obj.position.y * gridSize + 8}
-            radius={4}
-            fill="#fff"
-            opacity={0.8}
+        <Group key={`tile-${layer.id}-${index}`}>
+          {/* Base shape - organic or rectangular */}
+          {useOrganicShape ? (
+            <Path
+              data={generateOrganicPath(x, y, gridSize)}
+              fill={terrainDisplay.backgroundColor}
+              stroke="#333333"
+              strokeWidth={1}
+              opacity={layer.opacity || 1}
+            />
+          ) : (
+            <Rect
+              x={x}
+              y={y}
+              width={gridSize}
+              height={gridSize}
+              fill={terrainDisplay.backgroundColor}
+              stroke="#333333"
+              strokeWidth={1}
+              opacity={layer.opacity || 1}
+              cornerRadius={terrainDisplay.borderRadius || 0}
+            />
+          )}
+          
+          {/* Emoji icon overlay */}
+          <Text
+            x={x + gridSize / 2}
+            y={y + gridSize / 2}
+            text={terrainDisplay.icon}
+            fontSize={Math.min(gridSize * 0.6, 24)}
+            fontFamily="Arial"
+            fill="rgba(0, 0, 0, 0.7)"
+            align="center"
+            verticalAlign="middle"
+            offsetX={Math.min(gridSize * 0.3, 12)}
+            offsetY={Math.min(gridSize * 0.3, 12)}
+            opacity={layer.opacity || 1}
           />
         </Group>
       );
     });
   };
 
-  // Render all layers in order
-  const renderLayers = () => {
-    return map.layers.map(layer => {
-      switch (layer.type) {
-        case 'terrain':
-          return renderTerrainLayer(layer);
-        case 'objects':
-          return renderObjectsLayer(layer);
-        default:
-          return null;
-      }
+  // Render objects for a specific layer
+  const renderObjectsLayer = (layer: any) => {
+    if (!layer.objects || !layer.isVisible) return null;
+    const environmentType = getMapEnvironmentType();
+
+    return layer.objects.map((obj: MapObject) => {
+      const isSelected = selectedObjects.includes(obj.id);
+      const objectDisplay = getTerrainDisplay(obj.type, environmentType);
+      const x = obj.position.x * gridSize;
+      const y = obj.position.y * gridSize;
+      const width = obj.size.width * gridSize;
+      const height = obj.size.height * gridSize;
+      
+      return (
+        <Group key={`object-${obj.id}`} opacity={layer.opacity || 1}>
+          {/* Base rectangle */}
+          <Rect
+            x={x}
+            y={y}
+            width={width}
+            height={height}
+            fill={objectDisplay.backgroundColor}
+            stroke={isSelected ? "#00ff00" : "#666"}
+            strokeWidth={isSelected ? 2 : 1}
+            opacity={0.8}
+            cornerRadius={3}
+          />
+          
+          {/* Object icon */}
+          <Text
+            x={x + width / 2}
+            y={y + height / 2}
+            text={objectDisplay.icon}
+            fontSize={Math.min(Math.min(width, height) * 0.6, 24)}
+            fontFamily="Arial"
+            fill="rgba(0, 0, 0, 0.8)"
+            align="center"
+            verticalAlign="middle"
+            offsetX={Math.min(Math.min(width, height) * 0.3, 12)}
+            offsetY={Math.min(Math.min(width, height) * 0.3, 12)}
+            opacity={1}
+          />
+        </Group>
+      );
     });
+  };
+
+  // Render all layers in order with proper layering
+  const renderLayers = () => {
+    const environmentType = getMapEnvironmentType();
+    
+    // Separate terrain and object layers
+    const terrainLayers = map.layers.filter(layer => 
+      (layer.type === LayerType.BACKGROUND || layer.type === LayerType.TERRAIN) && layer.isVisible
+    );
+    const objectLayers = map.layers.filter(layer => 
+      layer.type === LayerType.OBJECTS && layer.isVisible
+    );
+    
+    // Create a tile map for proper layering - later layers override earlier ones
+    const tileMap = new Map<string, { tile: any; layer: any; display: any }>();
+    
+    // Process terrain layers in order
+    for (const layer of terrainLayers) {
+      if (layer.tiles) {
+        for (const tile of layer.tiles) {
+          const key = `${tile.position.x},${tile.position.y}`;
+          const terrainDisplay = getTerrainDisplay(tile.terrainType, environmentType);
+          tileMap.set(key, { tile, layer, display: terrainDisplay });
+        }
+      }
+    }
+    
+    // Render consolidated terrain tiles
+    const terrainElements = Array.from(tileMap.values()).map(({ tile, layer, display }, index) => {
+      const x = tile.position.x * gridSize;
+      const y = tile.position.y * gridSize;
+      const useOrganicShape = display.isOrganic && gridSize > 20;
+      
+      return (
+        <Group key={`consolidated-tile-${index}`}>
+          {/* Base shape - organic or rectangular */}
+          {useOrganicShape ? (
+            <Path
+              data={generateOrganicPath(x, y, gridSize)}
+              fill={display.backgroundColor}
+              stroke="#333333"
+              strokeWidth={1}
+              opacity={layer.opacity || 1}
+            />
+          ) : (
+            <Rect
+              x={x}
+              y={y}
+              width={gridSize}
+              height={gridSize}
+              fill={display.backgroundColor}
+              stroke="#333333"
+              strokeWidth={1}
+              opacity={layer.opacity || 1}
+              cornerRadius={display.borderRadius || 0}
+            />
+          )}
+          
+          {/* Emoji icon overlay */}
+          <Text
+            x={x + gridSize / 2}
+            y={y + gridSize / 2}
+            text={display.icon}
+            fontSize={Math.min(gridSize * 0.6, 24)}
+            fontFamily="Arial"
+            fill="rgba(0, 0, 0, 0.7)"
+            align="center"
+            verticalAlign="middle"
+            offsetX={Math.min(gridSize * 0.3, 12)}
+            offsetY={Math.min(gridSize * 0.3, 12)}
+            opacity={layer.opacity || 1}
+          />
+        </Group>
+      );
+    });
+    
+    // Render object layers separately (on top)
+    const objectElements = objectLayers.map(layer => renderObjectsLayer(layer));
+    
+    return [...terrainElements, ...objectElements];
   };
 
   // Update stage transform when viewport changes

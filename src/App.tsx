@@ -30,7 +30,8 @@ import {
   GridOn as GridIcon,
   Straighten as RulerIcon,
   Help as HelpIcon,
-  Campaign as CampaignIcon
+  Campaign as CampaignIcon,
+  Map as MapIcon
 } from '@mui/icons-material';
 import SimpleMapCanvas from './components/MapCanvas/SimpleMapCanvas';
 import MapLegend from './components/MapLegend';
@@ -60,6 +61,7 @@ import { useAutoSave } from './hooks/useAutoSave';
 import { fileService } from './services/fileService';
 import { mapEditingService } from './services/mapEditingService';
 import workspaceService from './services/workspaceService';
+import { mapGenerationService, MapGenerationOptions } from './services/mapGenerationService';
 
 // Create Material-UI theme
 const theme = createTheme({
@@ -249,6 +251,49 @@ function App() {
     }
     
     setCampaignBuilderOpen(false);
+  }, [showNotification]);
+
+  // Generate new layered map
+  const handleGenerateMap = useCallback(() => {
+    const options: MapGenerationOptions = {
+      width: 40,
+      height: 30,
+      numberOfRooms: 6,
+      minRoomSize: 4,
+      maxRoomSize: 8,
+      corridorWidth: 2,
+      organicFactor: 0.7,
+      environmentType: 'dungeon'
+    };
+
+    try {
+      const generatedMap = mapGenerationService.generateLayeredMap(options);
+      
+      // Update current map
+      setCurrentMap(generatedMap);
+      
+      // Reset tool state
+      setToolState({
+        activeTool: ToolType.SELECT,
+        selectedTerrainType: TerrainType.WALL,
+        selectedObjectType: 'furniture' as any,
+        selectedColor: { r: 128, g: 128, b: 128 },
+        brushSize: 1,
+        selectedLayer: generatedMap.layers[0]?.id || ''
+      });
+
+      // Reset viewport
+      setViewportState({
+        position: { x: 0, y: 0 },
+        zoom: 1,
+        rotation: 0
+      });
+
+      showNotification('Generated new layered map with organic rooms and pathways!', 'success');
+    } catch (error) {
+      console.error('Failed to generate map:', error);
+      showNotification('Failed to generate map. Please try again.', 'error');
+    }
   }, [showNotification]);
 
   // Helper functions for map legend
@@ -629,6 +674,14 @@ function App() {
               sx={{ mr: 1 }}
             >
               AI Generate
+            </Button>
+            <Button
+              color="inherit"
+              startIcon={<MapIcon />}
+              onClick={handleGenerateMap}
+              sx={{ mr: 1 }}
+            >
+              Generate Map
             </Button>
             <Button
               color="inherit"
