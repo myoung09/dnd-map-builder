@@ -36,12 +36,13 @@ import { AIGenerationOptions, AIGenerationResult, aiMapGenerationService } from 
 import { AI_GENERATION } from '../../utils/constants';
 import { 
   MapTerrainType, 
-  HouseSubtype, 
+  HouseSubtype,
+  CaveSubtype,
   HouseStory, 
   mapGenerationService, 
   MapGenerationOptions 
 } from '../../services/mapGenerationService';
-import { getHouseConfig } from '../../config';
+import { getHouseConfig, getCaveConfig } from '../../config';
 
 interface AIGenerationDialogProps {
   open: boolean;
@@ -113,6 +114,7 @@ export const AIGenerationDialog: React.FC<AIGenerationDialogProps> = ({
   const [mapType, setMapType] = useState<MapTerrainType>(MapTerrainType.DUNGEON);
   const [houseSubtype, setHouseSubtype] = useState<HouseSubtype>(HouseSubtype.COTTAGE);
   const [houseStory, setHouseStory] = useState<HouseStory>(HouseStory.STORY_1);
+  const [caveSubtype, setCaveSubtype] = useState<CaveSubtype>(CaveSubtype.NATURAL_CAVERN);
   const [numberOfRooms, setNumberOfRooms] = useState<number>(5);
   const [options, setOptions] = useState<AIGenerationOptions>({
     mapSize: { width: 30, height: 30 },
@@ -175,6 +177,18 @@ export const AIGenerationDialog: React.FC<AIGenerationDialogProps> = ({
       case HouseSubtype.INN: return 'Inn/Tavern';
       case HouseSubtype.CASTLE: return 'Castle';
       case HouseSubtype.WIZARD_TOWER: return 'Wizard Tower';
+      default: return subtype;
+    }
+  };
+
+  // Helper to get display name for cave subtype
+  const getCaveSubtypeDisplayName = (subtype: CaveSubtype): string => {
+    switch (subtype) {
+      case CaveSubtype.NATURAL_CAVERN: return 'Natural Cavern';
+      case CaveSubtype.CRYSTAL_CAVE: return 'Crystal Cave';
+      case CaveSubtype.LAVA_TUBES: return 'Lava Tubes';
+      case CaveSubtype.UNDERGROUND_LAKE: return 'Underground Lake';
+      case CaveSubtype.MINE: return 'Mine';
       default: return subtype;
     }
   };
@@ -244,7 +258,8 @@ export const AIGenerationDialog: React.FC<AIGenerationDialogProps> = ({
         width: options.mapSize.width,
         height: options.mapSize.height,
         terrainType: mapType,
-        subtype: mapType === MapTerrainType.HOUSE ? houseSubtype : undefined,
+        subtype: mapType === MapTerrainType.HOUSE ? houseSubtype : 
+                 mapType === MapTerrainType.CAVE ? caveSubtype : undefined,
         story: mapType === MapTerrainType.HOUSE ? houseStory : undefined,
         numberOfRooms: numberOfRooms,
         minRoomSize: 3,
@@ -463,8 +478,62 @@ export const AIGenerationDialog: React.FC<AIGenerationDialogProps> = ({
             </Box>
           )}
 
-          {/* General Room Count (for non-house terrains) */}
-          {mapType !== MapTerrainType.HOUSE && (
+          {/* Cave Subtype Selection (only for CAVE terrain) */}
+          {mapType === MapTerrainType.CAVE && (
+            <Box>
+              <Typography variant="h6" gutterBottom>
+                Cave Configuration
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+                <FormControl fullWidth>
+                  <InputLabel>Cave Type</InputLabel>
+                  <Select
+                    value={caveSubtype}
+                    label="Cave Type"
+                    onChange={(e) => {
+                      const newSubtype = e.target.value as CaveSubtype;
+                      setCaveSubtype(newSubtype);
+                      // Update room count to config default
+                      const config = getCaveConfig(newSubtype);
+                      if (config && config.defaultRoomCount) {
+                        setNumberOfRooms(config.defaultRoomCount);
+                      }
+                      setGeneration(prev => ({ ...prev, error: null }));
+                    }}
+                    disabled={generation.isGenerating}
+                  >
+                    {Object.values(CaveSubtype).map((subtype) => (
+                      <MenuItem key={subtype} value={subtype}>
+                        {getCaveSubtypeDisplayName(subtype)}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Box>
+
+              <FormControl fullWidth>
+                <InputLabel>Number of Rooms</InputLabel>
+                <Select
+                  value={numberOfRooms}
+                  label="Number of Rooms"
+                  onChange={(e) => {
+                    setNumberOfRooms(e.target.value as number);
+                    setGeneration(prev => ({ ...prev, error: null }));
+                  }}
+                  disabled={generation.isGenerating}
+                >
+                  {Array.from({ length: 20 }, (_, i) => i + 1).map((count) => (
+                    <MenuItem key={count} value={count}>
+                      {count} {count === 1 ? 'Room' : 'Rooms'}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Box>
+          )}
+
+          {/* General Room Count (for non-house/cave terrains) */}
+          {mapType !== MapTerrainType.HOUSE && mapType !== MapTerrainType.CAVE && (
             <Box>
               <FormControl fullWidth>
                 <InputLabel>Number of Rooms</InputLabel>
