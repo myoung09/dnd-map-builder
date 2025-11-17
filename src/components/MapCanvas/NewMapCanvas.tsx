@@ -465,7 +465,8 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
               );
             } else {
               // Regular rectangular shape
-              // Corridors should have no stroke to avoid grid lines
+              // Corridors and terrain tiles (caves) should have no stroke to avoid grid line artifacts
+              const isTerrain = obj.name.includes('cave') || obj.name.includes('terrain');
               allObjects.push(
                 <Rect
                   key={obj.id}
@@ -474,8 +475,8 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
                   width={width}
                   height={height}
                   fill={fillColor}
-                  stroke={isSelected ? '#0088ff' : (isCorridor ? undefined : '#666666')}
-                  strokeWidth={isSelected ? 2 : (isCorridor ? 0 : 1)}
+                  stroke={isSelected ? '#0088ff' : (isCorridor || isTerrain ? undefined : '#666666')}
+                  strokeWidth={isSelected ? 2 : (isCorridor || isTerrain ? 0 : 1)}
                   cornerRadius={obj.name.includes('room') ? 4 : 0}
                   objectId={obj.id}
                   perfectDrawEnabled={false}

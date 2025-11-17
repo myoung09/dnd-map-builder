@@ -26,12 +26,12 @@ export const NATURAL_CAVERN_CONFIG: SubtypeConfig = {
   
   // Drunkard's Walk parameters
   drunkardsWalk: {
-    coveragePercent: 20, // 20% of map is cave
-    resolution: 4, // 4x sub-grid resolution
-    directionChangeChance: 0.25, // 15% chance to change direction
-    widerAreaChance: 0.10, // 10% chance for wider areas
-    minStepsBeforeChange: 3,
-    maxStepsBeforeChange: 8
+    coveragePercent: 30, // 20% of map is cave
+    resolution: 1, // 5x sub-grid resolution
+    directionChangeChance: 0.8, // 80% chance to change direction
+    widerAreaChance: 0.2, // 20% chance for wider areas
+    minStepsBeforeChange: 8,
+    maxStepsBeforeChange: 15
   }
 };
 
@@ -81,10 +81,10 @@ export const LAVA_TUBES_CONFIG: SubtypeConfig = {
   // Drunkard's Walk parameters
   drunkardsWalk: {
     coveragePercent: 10, // 10% - narrow tubes
-    resolution: 4, // Higher resolution for thin tubes
+    resolution: 2, // Higher resolution for thin tubes
     directionChangeChance: 0.10, // Long, straight tubes
     widerAreaChance: 0.01, // Rare wider areas
-    minStepsBeforeChange: 5,
+    minStepsBeforeChange: 1,
     maxStepsBeforeChange: 12
   }
 };
@@ -107,12 +107,12 @@ export const UNDERGROUND_LAKE_CONFIG: SubtypeConfig = {
   
   // Drunkard's Walk parameters
   drunkardsWalk: {
-    coveragePercent: 25, // 25% - large open water areas
-    resolution: 2, // Lower resolution for larger chambers
-    directionChangeChance: 0.40, // More irregular shoreline
-    widerAreaChance: 0.10, // Frequent wide areas (lake chambers)
-    minStepsBeforeChange: 2,
-    maxStepsBeforeChange: 6
+    coveragePercent: 45, // 45% - large open water areas
+    resolution: 1, // Lower resolution for larger chambers
+    directionChangeChance: 0.80, // More irregular shoreline
+    widerAreaChance: 0.20, // Frequent wide areas (lake chambers)
+    minStepsBeforeChange: 1,
+    maxStepsBeforeChange: 2
   }
 };
 
@@ -134,10 +134,10 @@ export const MINE_CONFIG: SubtypeConfig = {
   
   // Drunkard's Walk parameters
   drunkardsWalk: {
-    coveragePercent: 12, // 12% - compact mine shafts
-    resolution: 4, // Higher resolution for narrow shafts
+    coveragePercent: 18, // 12% - compact mine shafts
+    resolution: 3, // Higher resolution for narrow shafts
     directionChangeChance: 0.08, // Very straight passages (man-made)
-    widerAreaChance: 0.02, // Occasional work areas
+    widerAreaChance: 0.06, // Occasional work areas
     minStepsBeforeChange: 6,
     maxStepsBeforeChange: 15
   }
