@@ -4,8 +4,11 @@ import {
   getHouseConfig,
   getCaveConfig,
   getColorThemes,
+  getTerrainAlgorithm,
+  TerrainAlgorithm,
   type TerrainColorTheme
 } from '../config';
+import { BspAlgorithm, DrunkardsWalkAlgorithm } from './terrainAlgorithms';
 
 // Import enums for use in this file
 import {
@@ -163,21 +166,14 @@ export class MapGenerationService {
     // Generate complete map structure (rooms + corridors + entrance/exit)
     const mapStructure = this.generateCompleteMapStructure(options);
     
-    // Apply organic distortion to cave rooms
-    const distortedRooms = this.applyOrganicDistortion(
-      mapStructure.rooms,
-      options.terrainType,
-      options.subtype
-    );
-    
     // Create unified layers: Background → Terrain (rooms + paths combined) → Objects → Grid
     const backgroundLayer = this.createBackgroundLayer(colorTheme, options);
     const terrainLayer = this.createUnifiedTerrainLayer(
-      distortedRooms, 
+      mapStructure.rooms, 
       mapStructure.corridors, 
       colorTheme
     );
-    const objectsLayer = this.createObjectsLayer(distortedRooms, options);
+    const objectsLayer = this.createObjectsLayer(mapStructure.rooms, options);
     const gridLayer = this.createGridLayer(options);
     
     // Add entrance/exit markers if they exist
@@ -1423,18 +1419,44 @@ export class MapGenerationService {
   // ============================================================================
 
   private generateRoomsByTerrain(options: MapGenerationOptions): GeneratedRoom[] {
-    switch (options.terrainType) {
-      case MapTerrainType.HOUSE:
-        return this.generateBSPRooms(options); // Use BSP for houses
-      case MapTerrainType.FOREST:
-        return this.generateBSPRooms(options); // Use BSP for forests (clearings as rooms)
-      case MapTerrainType.CAVE:
-        return this.generateBSPRooms(options); // Use BSP for caves
-      case MapTerrainType.TOWN:
-        return this.generateBSPRooms(options); // Use BSP for towns (buildings as rooms)
-      case MapTerrainType.DUNGEON:
-        return this.generateBSPRooms(options); // Use BSP for dungeons
+    const { terrainType, subtype } = options;
+    
+    // Get the algorithm from configuration
+    const algorithm = getTerrainAlgorithm(terrainType, subtype);
+    
+    // Dispatch to the appropriate algorithm
+    switch (algorithm) {
+      case TerrainAlgorithm.BSP: {
+        const bspAlgorithm = new BspAlgorithm(this.seed);
+        const algorithmRooms = bspAlgorithm.generateRooms(options);
+        // Convert AlgorithmGeneratedRoom to GeneratedRoom (they're compatible)
+        return algorithmRooms as GeneratedRoom[];
+      }
+      
+      case TerrainAlgorithm.DRUNKARDS_WALK: {
+        const drunkardAlgorithm = new DrunkardsWalkAlgorithm(this.seed);
+        const algorithmRooms = drunkardAlgorithm.generateCave(options);
+        // Convert AlgorithmGeneratedRoom to GeneratedRoom (they're compatible)
+        return algorithmRooms.rooms as GeneratedRoom[];
+      }
+      
+      case TerrainAlgorithm.CELLULAR_AUTOMATA:
+        // TODO: Implement cellular automata algorithm
+        // Fallback to BSP for now
+        return this.generateBSPRooms(options);
+      
+      case TerrainAlgorithm.GRID:
+        // TODO: Implement grid algorithm
+        // Fallback to BSP for now
+        return this.generateBSPRooms(options);
+      
+      case TerrainAlgorithm.VORONOI:
+        // TODO: Implement voronoi algorithm
+        // Fallback to BSP for now
+        return this.generateBSPRooms(options);
+      
       default:
+        // Fallback to BSP
         return this.generateBSPRooms(options);
     }
   }
@@ -1770,111 +1792,6 @@ export class MapGenerationService {
       isLocked: false,
       opacity: 1
     };
-  }
-
-  /**
-   * Apply organic distortion to cave rooms
-   * Creates irregular, natural-looking cave edges by converting rectangles to organic polygons
-   */
-  private applyOrganicDistortion(rooms: GeneratedRoom[], terrainType: MapTerrainType, subtype?: TerrainSubtype): GeneratedRoom[] {
-    // Only apply to caves
-    if (terrainType !== MapTerrainType.CAVE) {
-      return rooms;
-    }
-
-    return rooms.map(room => {
-      // Skip if already organic or circular
-      if (room.shape.type === 'organic' || room.shape.type === 'circle') {
-        return room;
-      }
-
-      // Generate organic polygon from rectangular bounds
-      const points = this.generateOrganicPolygon(
-        room.position.x,
-        room.position.y,
-        room.size.width,
-        room.size.height,
-        subtype as CaveSubtype
-      );
-
-      return {
-        ...room,
-        shape: {
-          type: 'organic' as const,
-          points: points
-        }
-      };
-    });
-  }
-
-  /**
-   * Generate organic polygon points from rectangular bounds
-   * Uses noise and subdivision to create natural cave-like shapes
-   * Returns points RELATIVE to center (for rendering)
-   */
-  private generateOrganicPolygon(
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    caveSubtype?: CaveSubtype
-  ): Position[] {
-    // Determine distortion level based on cave type
-    let distortionFactor = 0.3; // Default: 30% of cell size
-    let cornerPoints = 8; // Number of initial corner points
-    
-    if (caveSubtype === CaveSubtype.CRYSTAL_CAVE) {
-      distortionFactor = 0.15; // Less distortion for angular crystals
-      cornerPoints = 6;
-    } else if (caveSubtype === CaveSubtype.MINE) {
-      distortionFactor = 0.1; // Minimal distortion for man-made mines
-      cornerPoints = 4;
-    } else if (caveSubtype === CaveSubtype.NATURAL_CAVERN) {
-      distortionFactor = 0.4; // High distortion for natural caves
-      cornerPoints = 12;
-    } else if (caveSubtype === CaveSubtype.LAVA_TUBES) {
-      distortionFactor = 0.35; // Moderate-high for flowing lava shapes
-      cornerPoints = 10;
-    } else if (caveSubtype === CaveSubtype.UNDERGROUND_LAKE) {
-      distortionFactor = 0.25; // Moderate for water-worn edges
-      cornerPoints = 10;
-    }
-
-    const points: Position[] = [];
-    const halfWidth = width / 2;
-    const halfHeight = height / 2;
-    
-    // Generate points around the perimeter (relative to center)
-    for (let i = 0; i < cornerPoints; i++) {
-      const angle = (i / cornerPoints) * Math.PI * 2;
-      
-      // Calculate base point on rectangle edge (relative to center)
-      const cos = Math.cos(angle);
-      const sin = Math.sin(angle);
-      
-      // Calculate intersection with rectangle bounds
-      const tx = cos !== 0 ? (cos > 0 ? halfWidth : -halfWidth) / cos : Infinity;
-      const ty = sin !== 0 ? (sin > 0 ? halfHeight : -halfHeight) / sin : Infinity;
-      const t = Math.min(Math.abs(tx), Math.abs(ty));
-      
-      const baseX = cos * t;
-      const baseY = sin * t;
-      
-      // Add random distortion perpendicular to the edge
-      const distortionAmount = (this.random() - 0.5) * 2 * distortionFactor * Math.min(width, height);
-      const normalX = -sin; // Perpendicular to radial direction
-      const normalY = cos;
-      
-      const distortedX = baseX + normalX * distortionAmount;
-      const distortedY = baseY + normalY * distortionAmount;
-      
-      points.push({
-        x: Math.round(distortedX * 100) / 100, // Round to 2 decimals
-        y: Math.round(distortedY * 100) / 100
-      });
-    }
-    
-    return points;
   }
 
   /**

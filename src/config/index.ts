@@ -9,3 +9,4 @@ export * from './types';
 export * from './terrains/houseConfig';
 export * from './terrains/caveConfig';
 export * from './terrains/colorThemes';
+export * from './utils';

@@ -16,6 +16,15 @@ import {
   HouseStory
 } from '../services/mapGenerationService';
 
+// Terrain generation algorithms
+export enum TerrainAlgorithm {
+  BSP = 'bsp',                          // Binary Space Partitioning - for structured layouts (houses, dungeons)
+  DRUNKARDS_WALK = 'drunkards_walk',    // Drunkard's Walk - for organic caves
+  CELLULAR_AUTOMATA = 'cellular_automata', // Cellular Automata - for organic forests, biomes
+  GRID = 'grid',                        // Grid-based - for towns, cities
+  VORONOI = 'voronoi'                   // Voronoi diagrams - for natural regions
+}
+
 // Union type for all terrain subtypes
 export type TerrainSubtype = HouseSubtype | ForestSubtype | CaveSubtype | TownSubtype | DungeonSubtype;
 
@@ -43,6 +52,16 @@ export interface StoryConfig {
   mapHeight?: number; // Map height in grid cells (default: 30)
 }
 
+// Drunkard's Walk algorithm parameters (for caves)
+export interface DrunkardsWalkParams {
+  coveragePercent?: number; // Percentage of map to carve (default: varies by subtype)
+  resolution?: number; // Sub-grid resolution multiplier (default: 3)
+  directionChangeChance?: number; // Probability of changing direction (default: 0.15)
+  widerAreaChance?: number; // Probability of carving wider areas (default: 0.02)
+  minStepsBeforeChange?: number; // Minimum steps before forced direction change (default: 3)
+  maxStepsBeforeChange?: number; // Maximum steps before forced direction change (default: 8)
+}
+
 // Subtype configuration (e.g., Cottage, Dense Forest, Natural Cavern)
 export interface SubtypeConfig {
   subtype: TerrainSubtype;
@@ -50,6 +69,9 @@ export interface SubtypeConfig {
   description: string;
   roomShape: 'rectangle' | 'circle';
   stories?: StoryConfig[]; // Only for houses
+  
+  // Algorithm override (optional - if not specified, uses terrain's default algorithm)
+  algorithm?: TerrainAlgorithm;
   
   // Generation parameters
   defaultRoomCount?: number;
@@ -59,6 +81,9 @@ export interface SubtypeConfig {
   corridorWidth?: number;
   gridCellSize?: number; // Grid cell size in pixels - larger = smaller building appearance
   minRoomSpacing?: number; // Minimum grid cells between rooms
+  
+  // Algorithm-specific parameters
+  drunkardsWalk?: DrunkardsWalkParams; // Parameters for Drunkard's Walk algorithm
   
   // Special rendering
   hasBackgroundStructure?: boolean; // e.g., circular towers for Wizard Tower
@@ -70,6 +95,9 @@ export interface TerrainConfig {
   type: MapTerrainType;
   name: string;
   description: string;
+  
+  // Generation algorithm to use for this terrain type
+  algorithm: TerrainAlgorithm;
   
   // Available subtypes for this terrain
   subtypes: SubtypeConfig[];

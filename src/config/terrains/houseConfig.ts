@@ -5,7 +5,7 @@
  * with their multi-story configurations, room sizes, and special properties.
  */
 
-import { SubtypeConfig } from '../types';
+import { SubtypeConfig, TerrainAlgorithm } from '../types';
 import { HouseSubtype, HouseStory } from '../../types/enums';
 
 export const COTTAGE_CONFIG: SubtypeConfig = {
@@ -13,6 +13,7 @@ export const COTTAGE_CONFIG: SubtypeConfig = {
   name: 'Cottage',
   description: 'Small, cozy home',
   roomShape: 'rectangle',
+  algorithm: TerrainAlgorithm.BSP, // Use Binary Space Partitioning for structured layout
   gridCellSize: 48, // Larger grid = smaller building appearance
   minRoomSpacing: 1, // Very close together (1 grid cell between rooms)
   stories: [
@@ -63,6 +64,7 @@ export const MANOR_CONFIG: SubtypeConfig = {
   name: 'Manor',
   description: 'Large estate with multiple wings',
   roomShape: 'rectangle',
+  algorithm: TerrainAlgorithm.BSP,
   gridCellSize: 32, // Standard grid size for larger buildings
   minRoomSpacing: 1, // Close together for interior feel
   stories: [
@@ -126,6 +128,7 @@ export const INN_CONFIG: SubtypeConfig = {
   name: 'Inn & Tavern',
   description: 'Common room with guest quarters',
   roomShape: 'rectangle',
+  algorithm: TerrainAlgorithm.BSP,
   gridCellSize: 36, // Slightly larger than manor, smaller than cottage
   minRoomSpacing: 1, // Close together
   stories: [
@@ -176,6 +179,7 @@ export const CASTLE_CONFIG: SubtypeConfig = {
   name: 'Castle',
   description: 'Fortified structure with thick walls',
   roomShape: 'rectangle',
+  algorithm: TerrainAlgorithm.BSP,
   gridCellSize: 24, // Smallest grid = largest building appearance
   minRoomSpacing: 2, // Slightly more space (thick walls)
   stories: [
@@ -239,6 +243,7 @@ export const WIZARD_TOWER_CONFIG: SubtypeConfig = {
   name: 'Wizard Tower',
   description: 'Vertical tower with circular structure',
   roomShape: 'rectangle', // Rooms are rectangular, tower structure is circular
+  algorithm: TerrainAlgorithm.BSP,
   hasBackgroundStructure: true,
   backgroundRenderer: 'wizardTower', // Reference to special rendering
   gridCellSize: 40, // Medium-large grid for mystical tower
