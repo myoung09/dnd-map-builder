@@ -118,11 +118,16 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
     map.layers.forEach(layer => {
       if (layer.type === 'terrain' && layer.isVisible && layer.objects) {
         layer.objects.forEach(obj => {
-          // Add all cells occupied by this object
-          for (let dy = 0; dy < obj.size.height; dy++) {
-            for (let dx = 0; dx < obj.size.width; dx++) {
-              const cellX = obj.position.x + dx;
-              const cellY = obj.position.y + dy;
+          // Calculate which grid cells this object overlaps
+          // Handle fractional positions and sizes correctly
+          const startX = Math.floor(obj.position.x);
+          const startY = Math.floor(obj.position.y);
+          const endX = Math.floor(obj.position.x + obj.size.width);
+          const endY = Math.floor(obj.position.y + obj.size.height);
+          
+          // Add all grid cells that this object overlaps
+          for (let cellY = startY; cellY <= endY; cellY++) {
+            for (let cellX = startX; cellX <= endX; cellX++) {
               terrainCells.add(`${cellX},${cellY}`);
             }
           }
