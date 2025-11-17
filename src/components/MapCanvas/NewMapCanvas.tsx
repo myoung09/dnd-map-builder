@@ -125,10 +125,34 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
           const endX = Math.floor(obj.position.x + obj.size.width);
           const endY = Math.floor(obj.position.y + obj.size.height);
           
-          // Add all grid cells that this object overlaps
+          // For each grid cell that this object might overlap
           for (let cellY = startY; cellY <= endY; cellY++) {
             for (let cellX = startX; cellX <= endX; cellX++) {
-              terrainCells.add(`${cellX},${cellY}`);
+              // Check if this object actually has floor coverage in this specific grid cell
+              // Calculate the overlap between the object and the grid cell
+              const cellLeft = cellX;
+              const cellRight = cellX + 1;
+              const cellTop = cellY;
+              const cellBottom = cellY + 1;
+              
+              const objLeft = obj.position.x;
+              const objRight = obj.position.x + obj.size.width;
+              const objTop = obj.position.y;
+              const objBottom = obj.position.y + obj.size.height;
+              
+              // Check if there's actual overlap (not just touching at edges)
+              const overlapLeft = Math.max(cellLeft, objLeft);
+              const overlapRight = Math.min(cellRight, objRight);
+              const overlapTop = Math.max(cellTop, objTop);
+              const overlapBottom = Math.min(cellBottom, objBottom);
+              
+              // Only add the cell if there's meaningful overlap (area > 0)
+              const overlapWidth = overlapRight - overlapLeft;
+              const overlapHeight = overlapBottom - overlapTop;
+              
+              if (overlapWidth > 0.001 && overlapHeight > 0.001) {
+                terrainCells.add(`${cellX},${cellY}`);
+              }
             }
           }
         });
