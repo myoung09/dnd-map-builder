@@ -34,9 +34,13 @@ export interface StoryConfig {
   numberOfRooms: number;
   minRoomSize: number;
   maxRoomSize: number;
-  roomPadding: number; // 0.0 to 1.0
+  roomPadding: number; // 0.0 to 1.0 - padding inside room boundaries
   corridorWidth: number;
   useBasementColors: boolean;
+  gridCellSize?: number; // Grid cell size in pixels (default: 32)
+  minRoomSpacing?: number; // Minimum grid cells between rooms (default: 1-3)
+  mapWidth?: number; // Map width in grid cells (default: 40)
+  mapHeight?: number; // Map height in grid cells (default: 30)
 }
 
 // Subtype configuration (e.g., Cottage, Dense Forest, Natural Cavern)
@@ -53,6 +57,8 @@ export interface SubtypeConfig {
   maxRoomSize?: number;
   roomPadding?: number;
   corridorWidth?: number;
+  gridCellSize?: number; // Grid cell size in pixels - larger = smaller building appearance
+  minRoomSpacing?: number; // Minimum grid cells between rooms
   
   // Special rendering
   hasBackgroundStructure?: boolean; // e.g., circular towers for Wizard Tower

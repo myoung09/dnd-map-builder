@@ -878,7 +878,7 @@ function App() {
               selectedObjects={selectedObjects}
               onObjectSelection={handleObjectSelection}
               showGrid={true}
-              gridSize={32}
+              gridSize={currentMap.gridConfig?.cellSize || 32}
             />
             
             {/* Map Legend Overlay */}

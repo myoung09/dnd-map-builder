@@ -44,6 +44,8 @@ Configuration for a specific floor/story (houses only)
 - Defines room count, sizes, and corridor widths
 - Specifies whether to use basement colors
 - Room padding and other per-story parameters
+- **Grid cell size** - Controls perceived building scale (larger grid = smaller building)
+- **Minimum room spacing** - Grid cells between rooms (1 = very close together)
 
 ### TerrainColorTheme
 
@@ -86,6 +88,13 @@ const randomTheme = houseThemes[Math.floor(Math.random() * houseThemes.length)];
 - **Multi-story**: 2-4 floors including basement
 - **Special Features**: Wizard Tower has circular background structure
 - **Color Themes**: 3 themes (Warm Wood, Stone & Slate, Rich Wood)
+- **Grid Sizes**:
+  - Cottage: 48px (largest grid = smallest building)
+  - Wizard Tower: 40px
+  - Inn: 36px
+  - Manor: 32px
+  - Castle: 24px (smallest grid = largest building)
+- **Room Spacing**: 1-2 grid cells between rooms for tight interior feel
 
 ### ✅ Color Themes
 

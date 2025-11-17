@@ -67,6 +67,7 @@ interface GeneratedRoom {
   size: { width: number; height: number };
   color?: Color;
   doors?: Position[]; // Door/opening positions for path connections
+  padding?: number; // Interior padding percentage (0.0 to 1.0)
 }
 
 interface RoomShape {
@@ -188,6 +189,33 @@ export class MapGenerationService {
     const mapId = uuidv4();
     const mapName = this.generateMapName(options);
 
+    // Determine grid cell size and map dimensions based on house configuration
+    let gridCellSize = 32; // Default
+    let mapWidth = options.width; // Default to user input
+    let mapHeight = options.height; // Default to user input
+    
+    if (options.terrainType === MapTerrainType.HOUSE && options.subtype && options.story) {
+      const houseConfig = getHouseConfig(options.subtype as HouseSubtype);
+      if (houseConfig && houseConfig.stories) {
+        const storyConfig = houseConfig.stories.find((s: any) => s.story === options.story);
+        if (storyConfig) {
+          if (storyConfig.gridCellSize) {
+            gridCellSize = storyConfig.gridCellSize;
+          } else if (houseConfig.gridCellSize) {
+            gridCellSize = houseConfig.gridCellSize;
+          }
+          
+          // Use configured map dimensions if available
+          if (storyConfig.mapWidth) {
+            mapWidth = storyConfig.mapWidth;
+          }
+          if (storyConfig.mapHeight) {
+            mapHeight = storyConfig.mapHeight;
+          }
+        }
+      }
+    }
+
     return {
       metadata: {
         id: mapId,
@@ -198,11 +226,11 @@ export class MapGenerationService {
         tags: [options.terrainType]
       },
       dimensions: {
-        width: options.width,
-        height: options.height
+        width: mapWidth,
+        height: mapHeight
       },
       gridConfig: {
-        cellSize: 32,
+        cellSize: gridCellSize,
         showGrid: true,
         gridColor: { r: 200, g: 200, b: 200, a: 0.3 },
         snapToGrid: true,
@@ -231,7 +259,7 @@ export class MapGenerationService {
     let corridors: Position[][] = [];
     
     // All terrains now use BSP + MST corridor connections
-    corridors = this.connectRoomsWithCorridors(rooms);
+    corridors = this.connectRoomsWithCorridors(rooms, options);
     console.log(`Generated ${corridors.length} corridors for ${rooms.length} rooms`);
     corridors.forEach((c, i) => console.log(`Corridor ${i}: ${c.length} points`));
     
@@ -497,12 +525,12 @@ export class MapGenerationService {
    * - Supports house subtype configurations
    */
   private generateBSPRooms(options: MapGenerationOptions): GeneratedRoom[] {
-    const { width, height, terrainType, subtype, story } = options;
+    const { terrainType, subtype, story } = options;
     
     // Create modified options based on house configuration if applicable
     let modifiedOptions = { ...options };
     
-    // Override room sizes (but NOT numberOfRooms) with house configuration if applicable
+    // Override room generation parameters with house configuration if applicable
     if (terrainType === MapTerrainType.HOUSE && subtype && story) {
       const houseConfig = getHouseConfig(subtype as HouseSubtype);
       if (houseConfig && houseConfig.stories) {
@@ -510,15 +538,19 @@ export class MapGenerationService {
         if (storyConfig) {
           modifiedOptions = {
             ...options,
-            // Keep user's numberOfRooms choice, only override sizes
+            // Use user's numberOfRooms if provided, otherwise use config default
+            numberOfRooms: options.numberOfRooms || storyConfig.numberOfRooms,
             minRoomSize: storyConfig.minRoomSize,
-            maxRoomSize: storyConfig.maxRoomSize
+            maxRoomSize: storyConfig.maxRoomSize,
+            // Use config's map dimensions if available
+            width: storyConfig.mapWidth || options.width,
+            height: storyConfig.mapHeight || options.height
           };
         }
       }
     }
     
-    const { numberOfRooms } = modifiedOptions;
+    const { numberOfRooms, width, height } = modifiedOptions;
     
     // Calculate BSP iterations needed
     const iterations = this.calculateBSPIterations(numberOfRooms);
@@ -700,14 +732,35 @@ export class MapGenerationService {
   }
 
   /**
-   * Create a room within a BSP container with random padding
+   * Create a room within a BSP container with configurable padding
    */
   private createRoomInContainer(container: BSPContainer, options: MapGenerationOptions): GeneratedRoom {
-    // Random padding (0 to 1/3 of container size on each side)
-    const paddingLeft = Math.floor(this.random() * (container.w / 3));
-    const paddingTop = Math.floor(this.random() * (container.h / 3));
-    const paddingRight = Math.floor(this.random() * (container.w / 3));
-    const paddingBottom = Math.floor(this.random() * (container.h / 3));
+    // Determine minimum room spacing from configuration
+    let minSpacing = 2; // Default: 2 grid cells between rooms (acts as padding)
+    let roomPadding = 0.0; // Default: no interior padding
+    
+    if (options.terrainType === MapTerrainType.HOUSE && options.subtype && options.story) {
+      const houseConfig = getHouseConfig(options.subtype as HouseSubtype);
+      if (houseConfig && houseConfig.stories) {
+        const storyConfig = houseConfig.stories.find((s: any) => s.story === options.story);
+        if (storyConfig) {
+          if (storyConfig.minRoomSpacing !== undefined) {
+            minSpacing = storyConfig.minRoomSpacing;
+          } else if (houseConfig.minRoomSpacing !== undefined) {
+            minSpacing = houseConfig.minRoomSpacing;
+          }
+          if (storyConfig.roomPadding !== undefined) {
+            roomPadding = storyConfig.roomPadding;
+          }
+        }
+      }
+    }
+    
+    // Create padding based on minimum spacing (deterministic: exactly minSpacing cells)
+    const paddingLeft = minSpacing;
+    const paddingTop = minSpacing;
+    const paddingRight = minSpacing;
+    const paddingBottom = minSpacing;
     
     const roomX = container.x + paddingLeft;
     const roomY = container.y + paddingTop;
@@ -741,7 +794,8 @@ export class MapGenerationService {
       shape: { type: roomShape },
       position: { x: roomX, y: roomY },
       size: { width: roomW, height: roomH },
-      doors: []
+      doors: [],
+      padding: roomPadding
     };
   }
 
@@ -752,10 +806,22 @@ export class MapGenerationService {
    * Connect rooms with L-shaped corridors
    * Uses minimum spanning tree approach: connect each room to nearest unconnected room
    */
-  private connectRoomsWithCorridors(rooms: GeneratedRoom[]): Position[][] {
+  private connectRoomsWithCorridors(rooms: GeneratedRoom[], options: MapGenerationOptions): Position[][] {
     const corridors: Position[][] = [];
     
     if (rooms.length === 0) return corridors;
+    
+    // Get corridor width from configuration
+    let corridorWidth = 1; // Default
+    if (options.terrainType === MapTerrainType.HOUSE && options.subtype && options.story) {
+      const houseConfig = getHouseConfig(options.subtype as HouseSubtype);
+      if (houseConfig && houseConfig.stories) {
+        const storyConfig = houseConfig.stories.find((s: any) => s.story === options.story);
+        if (storyConfig && storyConfig.corridorWidth) {
+          corridorWidth = storyConfig.corridorWidth;
+        }
+      }
+    }
     
     // Track which rooms are connected
     const connected = new Set<string>();
@@ -801,7 +867,7 @@ export class MapGenerationService {
           y: Math.floor(bestConnection.to.position.y + bestConnection.to.size.height / 2)
         };
         
-        const corridor = this.createLShapedCorridor(centerA, centerB);
+        const corridor = this.createLShapedCorridor(centerA, centerB, corridorWidth);
         corridors.push(corridor);
         connected.add(bestConnection.to.id);
       } else {
@@ -856,27 +922,42 @@ export class MapGenerationService {
   }
 
   /**
-   * Create L-shaped corridor between two points
+   * Create L-shaped corridor between two points with configurable width
    */
-  private createLShapedCorridor(start: Position, end: Position): Position[] {
+  private createLShapedCorridor(start: Position, end: Position, width: number = 1): Position[] {
     const corridor: Position[] = [];
     const turnHorizontalFirst = this.random() < 0.5;
+    
+    // Calculate corridor width offset (center corridor around path)
+    const offset = Math.floor(width / 2);
     
     if (turnHorizontalFirst) {
       // Horizontal then vertical
       for (let x = Math.min(start.x, end.x); x <= Math.max(start.x, end.x); x++) {
-        corridor.push({ x: Math.floor(x), y: Math.floor(start.y) });
+        // Add width by adding parallel lines
+        for (let w = -offset; w < width - offset; w++) {
+          corridor.push({ x: Math.floor(x), y: Math.floor(start.y) + w });
+        }
       }
       for (let y = Math.min(start.y, end.y); y <= Math.max(start.y, end.y); y++) {
-        corridor.push({ x: Math.floor(end.x), y: Math.floor(y) });
+        // Add width by adding parallel lines
+        for (let w = -offset; w < width - offset; w++) {
+          corridor.push({ x: Math.floor(end.x) + w, y: Math.floor(y) });
+        }
       }
     } else {
       // Vertical then horizontal
       for (let y = Math.min(start.y, end.y); y <= Math.max(start.y, end.y); y++) {
-        corridor.push({ x: Math.floor(start.x), y: Math.floor(y) });
+        // Add width by adding parallel lines
+        for (let w = -offset; w < width - offset; w++) {
+          corridor.push({ x: Math.floor(start.x) + w, y: Math.floor(y) });
+        }
       }
       for (let x = Math.min(start.x, end.x); x <= Math.max(start.x, end.x); x++) {
-        corridor.push({ x: Math.floor(x), y: Math.floor(end.y) });
+        // Add width by adding parallel lines
+        for (let w = -offset; w < width - offset; w++) {
+          corridor.push({ x: Math.floor(x), y: Math.floor(end.y) + w });
+        }
       }
     }
     
