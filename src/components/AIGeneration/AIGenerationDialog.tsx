@@ -41,6 +41,7 @@ import {
   mapGenerationService, 
   MapGenerationOptions 
 } from '../../services/mapGenerationService';
+import { getHouseConfig } from '../../config';
 
 interface AIGenerationDialogProps {
   open: boolean;
@@ -138,10 +139,10 @@ export const AIGenerationDialog: React.FC<AIGenerationDialogProps> = ({
       return 20; // Default max for non-house types
     }
     
-    const config = mapGenerationService['houseConfigs'].get(houseSubtype);
-    if (!config) return 10;
+    const config = getHouseConfig(houseSubtype);
+    if (!config || !config.stories) return 10;
     
-    const storyConfig = config.stories.find(s => s.story === houseStory);
+    const storyConfig = config.stories.find((s: any) => s.story === houseStory);
     return storyConfig ? storyConfig.numberOfRooms : 10;
   };
 
@@ -149,10 +150,10 @@ export const AIGenerationDialog: React.FC<AIGenerationDialogProps> = ({
   const getAvailableStories = (): HouseStory[] => {
     if (mapType !== MapTerrainType.HOUSE) return [];
     
-    const config = mapGenerationService['houseConfigs'].get(houseSubtype);
-    if (!config) return [HouseStory.STORY_1];
+    const config = getHouseConfig(houseSubtype);
+    if (!config || !config.stories) return [HouseStory.STORY_1];
     
-    return config.stories.map(s => s.story);
+    return config.stories.map((s: any) => s.story);
   };
 
   // Helper to get display name for house story
@@ -394,8 +395,8 @@ export const AIGenerationDialog: React.FC<AIGenerationDialogProps> = ({
                       const newSubtype = e.target.value as HouseSubtype;
                       setHouseSubtype(newSubtype);
                       // Reset to first available story when changing house type
-                      const config = mapGenerationService['houseConfigs'].get(newSubtype);
-                      if (config && config.stories.length > 0) {
+                      const config = getHouseConfig(newSubtype);
+                      if (config && config.stories && config.stories.length > 0) {
                         const newStory = config.stories[0].story;
                         setHouseStory(newStory);
                         setNumberOfRooms(config.stories[0].numberOfRooms);
@@ -421,9 +422,9 @@ export const AIGenerationDialog: React.FC<AIGenerationDialogProps> = ({
                       const newStory = e.target.value as HouseStory;
                       setHouseStory(newStory);
                       // Reset room count to max for this story
-                      const config = mapGenerationService['houseConfigs'].get(houseSubtype);
-                      if (config) {
-                        const storyConfig = config.stories.find(s => s.story === newStory);
+                      const config = getHouseConfig(houseSubtype);
+                      if (config && config.stories) {
+                        const storyConfig = config.stories.find((s: any) => s.story === newStory);
                         if (storyConfig) {
                           setNumberOfRooms(storyConfig.numberOfRooms);
                         }
