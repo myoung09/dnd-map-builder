@@ -10,15 +10,87 @@ export enum MapTerrainType {
   DUNGEON = 'dungeon'
 }
 
+// Subtypes for each terrain
+export enum HouseSubtype {
+  COTTAGE = 'cottage',
+  MANOR = 'manor',
+  INN = 'inn',
+  CASTLE = 'castle',
+  WIZARD_TOWER = 'wizard_tower'
+}
+
+export enum ForestSubtype {
+  DENSE_FOREST = 'dense_forest',
+  ENCHANTED_GROVE = 'enchanted_grove',
+  WOODLAND_TRAIL = 'woodland_trail',
+  SACRED_GROVE = 'sacred_grove',
+  OVERGROWN_RUINS = 'overgrown_ruins'
+}
+
+export enum CaveSubtype {
+  NATURAL_CAVERN = 'natural_cavern',
+  CRYSTAL_CAVE = 'crystal_cave',
+  LAVA_TUBES = 'lava_tubes',
+  UNDERGROUND_LAKE = 'underground_lake',
+  MINE = 'mine'
+}
+
+export enum TownSubtype {
+  VILLAGE = 'village',
+  MARKET_DISTRICT = 'market_district',
+  HARBOR_TOWN = 'harbor_town',
+  WALLED_CITY = 'walled_city',
+  CROSSROADS = 'crossroads'
+}
+
+export enum DungeonSubtype {
+  CRYPTS = 'crypts',
+  PRISON = 'prison',
+  TEMPLE = 'temple',
+  SEWER = 'sewer',
+  ANCIENT_RUINS = 'ancient_ruins'
+}
+
+// Story/Level for multi-story houses
+export enum HouseStory {
+  BASEMENT = 'basement',
+  STORY_1 = 'story_1',
+  STORY_2 = 'story_2',
+  STORY_3 = 'story_3'
+}
+
+export type TerrainSubtype = HouseSubtype | ForestSubtype | CaveSubtype | TownSubtype | DungeonSubtype;
+
 export interface MapGenerationOptions {
   width: number;
   height: number;
   terrainType: MapTerrainType;
+  subtype?: TerrainSubtype;
+  story?: HouseStory; // Only used for HOUSE terrain type
   numberOfRooms: number;
   minRoomSize: number;
   maxRoomSize: number;
   organicFactor: number; // 0.0 = geometric, 1.0 = very organic
   objectDensity: number; // 0.0 = sparse, 1.0 = dense
+}
+
+// House subtype configuration for multi-story generation
+interface HouseStoryConfig {
+  story: HouseStory;
+  numberOfRooms: number;
+  minRoomSize: number;
+  maxRoomSize: number;
+  roomPadding: number; // 0.0 to 1.0, how much padding in rooms
+  corridorWidth: number; // Width of corridors in cells
+  useBasementColors: boolean; // Use dungeon-like colors for basement
+}
+
+interface HouseSubtypeConfig {
+  subtype: HouseSubtype;
+  name: string;
+  description: string;
+  stories: HouseStoryConfig[];
+  roomShape: 'rectangle' | 'circle'; // Circle for wizard tower
 }
 
 // Coordinated color themes for terrain types
@@ -124,10 +196,12 @@ export class MapGenerationService {
   private seed: number = Math.random();
   private terrainColorSets: Map<MapTerrainType, TerrainColorTheme[]> = new Map();
   private terrainObjectSets: Map<MapTerrainType, TerrainObjectSet> = new Map();
+  private houseConfigs: Map<HouseSubtype, HouseSubtypeConfig> = new Map();
 
   constructor() {
     this.initializeTerrainColorSets();
     this.initializeTerrainObjectSets();
+    this.initializeHouseConfigs();
   }
 
   setSeed(seed: number) {
@@ -145,13 +219,13 @@ export class MapGenerationService {
     this.setSeed(Math.random() * 1000000);
 
     // Select coordinated color theme for this terrain
-    const colorTheme = this.selectColorTheme(options.terrainType);
+    const colorTheme = this.selectColorTheme(options);
     
     // Generate complete map structure (rooms + corridors + entrance/exit)
     const mapStructure = this.generateCompleteMapStructure(options);
     
     // Create unified layers: Background → Terrain (rooms + paths combined) → Objects → Grid
-    const backgroundLayer = this.createBackgroundLayer(colorTheme);
+    const backgroundLayer = this.createBackgroundLayer(colorTheme, options);
     const terrainLayer = this.createUnifiedTerrainLayer(
       mapStructure.rooms, 
       mapStructure.corridors, 
@@ -175,7 +249,7 @@ export class MapGenerationService {
     }
 
     const mapId = uuidv4();
-    const mapName = this.generateMapName(options.terrainType);
+    const mapName = this.generateMapName(options);
 
     return {
       metadata: {
@@ -211,7 +285,7 @@ export class MapGenerationService {
     entrance?: Position;
     exit?: Position;
   } {
-    const { width, height, terrainType } = options;
+    const { width, height, terrainType, story } = options;
     
     // Step 1: Generate rooms
     const rooms = this.generateRoomsByTerrain(options);
@@ -235,10 +309,15 @@ export class MapGenerationService {
     }
     
     // Step 5: Create entrance/exit for all terrain types except TOWN
+    // For HOUSE terrain, only create entrance/exit for first floor (STORY_1)
+    // Basements and upper floors have internal stairs, so no edge entrances
     let entrance: Position | undefined;
     let exit: Position | undefined;
     
-    if (terrainType !== MapTerrainType.TOWN) {
+    const shouldCreateEntrance = terrainType !== MapTerrainType.TOWN && 
+      !(terrainType === MapTerrainType.HOUSE && story && story !== HouseStory.STORY_1);
+    
+    if (shouldCreateEntrance) {
       const entranceExit = this.createEntranceExit(rooms, corridors, options);
       entrance = entranceExit.entrance;
       exit = entranceExit.exit;
@@ -386,6 +465,221 @@ export class MapGenerationService {
     // DUNGEON inherits from other terrain types (implemented in selectColorTheme)
   }
 
+  // Initialize house subtype configurations
+  private initializeHouseConfigs(): void {
+    // COTTAGE - Small cozy home
+    this.houseConfigs.set(HouseSubtype.COTTAGE, {
+      subtype: HouseSubtype.COTTAGE,
+      name: 'Cottage',
+      description: 'Small, cozy home',
+      roomShape: 'rectangle',
+      stories: [
+        {
+          story: HouseStory.BASEMENT,
+          numberOfRooms: 2,
+          minRoomSize: 4,
+          maxRoomSize: 4,
+          roomPadding: 0.2,
+          corridorWidth: 1,
+          useBasementColors: true
+        },
+        {
+          story: HouseStory.STORY_1,
+          numberOfRooms: 4,
+          minRoomSize: 5,
+          maxRoomSize: 5,
+          roomPadding: 0.25,
+          corridorWidth: 1,
+          useBasementColors: false
+        },
+        {
+          story: HouseStory.STORY_2,
+          numberOfRooms: 3,
+          minRoomSize: 4,
+          maxRoomSize: 4,
+          roomPadding: 0.2,
+          corridorWidth: 1,
+          useBasementColors: false
+        }
+      ]
+    });
+
+    // MANOR - Large estate
+    this.houseConfigs.set(HouseSubtype.MANOR, {
+      subtype: HouseSubtype.MANOR,
+      name: 'Manor',
+      description: 'Large estate with multiple wings',
+      roomShape: 'rectangle',
+      stories: [
+        {
+          story: HouseStory.BASEMENT,
+          numberOfRooms: 6,
+          minRoomSize: 6,
+          maxRoomSize: 6,
+          roomPadding: 0.3,
+          corridorWidth: 2,
+          useBasementColors: true
+        },
+        {
+          story: HouseStory.STORY_1,
+          numberOfRooms: 8,
+          minRoomSize: 7,
+          maxRoomSize: 7,
+          roomPadding: 0.3,
+          corridorWidth: 2,
+          useBasementColors: false
+        },
+        {
+          story: HouseStory.STORY_2,
+          numberOfRooms: 7,
+          minRoomSize: 6,
+          maxRoomSize: 6,
+          roomPadding: 0.25,
+          corridorWidth: 2,
+          useBasementColors: false
+        },
+        {
+          story: HouseStory.STORY_3,
+          numberOfRooms: 4,
+          minRoomSize: 5,
+          maxRoomSize: 5,
+          roomPadding: 0.2,
+          corridorWidth: 1,
+          useBasementColors: false
+        }
+      ]
+    });
+
+    // INN/TAVERN - Common room + guest rooms
+    this.houseConfigs.set(HouseSubtype.INN, {
+      subtype: HouseSubtype.INN,
+      name: 'Inn & Tavern',
+      description: 'Common room with guest quarters',
+      roomShape: 'rectangle',
+      stories: [
+        {
+          story: HouseStory.BASEMENT,
+          numberOfRooms: 3,
+          minRoomSize: 5,
+          maxRoomSize: 5,
+          roomPadding: 0.25,
+          corridorWidth: 1,
+          useBasementColors: true
+        },
+        {
+          story: HouseStory.STORY_1,
+          numberOfRooms: 5,
+          minRoomSize: 7,
+          maxRoomSize: 7,
+          roomPadding: 0.3,
+          corridorWidth: 2,
+          useBasementColors: false
+        },
+        {
+          story: HouseStory.STORY_2,
+          numberOfRooms: 8,
+          minRoomSize: 4,
+          maxRoomSize: 4,
+          roomPadding: 0.15,
+          corridorWidth: 2,
+          useBasementColors: false
+        }
+      ]
+    });
+
+    // CASTLE - Fortified structure
+    this.houseConfigs.set(HouseSubtype.CASTLE, {
+      subtype: HouseSubtype.CASTLE,
+      name: 'Castle',
+      description: 'Fortified structure with thick walls',
+      roomShape: 'rectangle',
+      stories: [
+        {
+          story: HouseStory.BASEMENT,
+          numberOfRooms: 8,
+          minRoomSize: 6,
+          maxRoomSize: 6,
+          roomPadding: 0.35,
+          corridorWidth: 2,
+          useBasementColors: true
+        },
+        {
+          story: HouseStory.STORY_1,
+          numberOfRooms: 10,
+          minRoomSize: 9,
+          maxRoomSize: 9,
+          roomPadding: 0.35,
+          corridorWidth: 3,
+          useBasementColors: false
+        },
+        {
+          story: HouseStory.STORY_2,
+          numberOfRooms: 8,
+          minRoomSize: 7,
+          maxRoomSize: 7,
+          roomPadding: 0.3,
+          corridorWidth: 2,
+          useBasementColors: false
+        },
+        {
+          story: HouseStory.STORY_3,
+          numberOfRooms: 6,
+          minRoomSize: 6,
+          maxRoomSize: 6,
+          roomPadding: 0.25,
+          corridorWidth: 2,
+          useBasementColors: false
+        }
+      ]
+    });
+
+    // WIZARD TOWER - Vertical circular structure
+    this.houseConfigs.set(HouseSubtype.WIZARD_TOWER, {
+      subtype: HouseSubtype.WIZARD_TOWER,
+      name: 'Wizard Tower',
+      description: 'Vertical tower with circular structure',
+      roomShape: 'rectangle', // Rooms are rectangular, tower structure is circular
+      stories: [
+        {
+          story: HouseStory.BASEMENT,
+          numberOfRooms: 3,
+          minRoomSize: 6,
+          maxRoomSize: 6,
+          roomPadding: 0.3,
+          corridorWidth: 1,
+          useBasementColors: true
+        },
+        {
+          story: HouseStory.STORY_1,
+          numberOfRooms: 3,
+          minRoomSize: 6,
+          maxRoomSize: 6,
+          roomPadding: 0.25,
+          corridorWidth: 1,
+          useBasementColors: false
+        },
+        {
+          story: HouseStory.STORY_2,
+          numberOfRooms: 3,
+          minRoomSize: 5,
+          maxRoomSize: 5,
+          roomPadding: 0.2,
+          corridorWidth: 1,
+          useBasementColors: false
+        },
+        {
+          story: HouseStory.STORY_3,
+          numberOfRooms: 2,
+          minRoomSize: 5,
+          maxRoomSize: 5,
+          roomPadding: 0.15,
+          corridorWidth: 1,
+          useBasementColors: false
+        }
+      ]
+    });
+  }
+
   // Initialize object sets for each terrain type
   private initializeTerrainObjectSets(): void {
     // HOUSE objects
@@ -460,7 +754,29 @@ export class MapGenerationService {
   }
 
   // Select a coordinated color theme for the terrain type
-  private selectColorTheme(terrainType: MapTerrainType): TerrainColorTheme {
+  private selectColorTheme(options: MapGenerationOptions): TerrainColorTheme {
+    const { terrainType, subtype, story } = options;
+    
+    // Check if this is a basement level - use dungeon colors
+    if (terrainType === MapTerrainType.HOUSE && subtype && story === HouseStory.BASEMENT) {
+      const houseConfig = this.houseConfigs.get(subtype as HouseSubtype);
+      if (houseConfig) {
+        const storyConfig = houseConfig.stories.find(s => s.story === story);
+        if (storyConfig && storyConfig.useBasementColors) {
+          // Use darkened cave/dungeon colors for basement
+          const caveThemes = this.terrainColorSets.get(MapTerrainType.CAVE) || [];
+          const selectedTheme = caveThemes[Math.floor(this.random() * caveThemes.length)];
+          
+          return {
+            ...selectedTheme,
+            name: `Basement ${selectedTheme.name}`,
+            backgroundColor: this.darkenColor(selectedTheme.backgroundColor, 0.2),
+            pathColor: this.darkenColor(selectedTheme.pathColor, 0.15)
+          };
+        }
+      }
+    }
+    
     if (terrainType === MapTerrainType.DUNGEON) {
       // DUNGEON inherits from a random base terrain type
       const baseTerrains = [MapTerrainType.HOUSE, MapTerrainType.CAVE, MapTerrainType.FOREST];
@@ -500,8 +816,23 @@ export class MapGenerationService {
     };
   }
 
-  // Generate map name based on terrain type
-  private generateMapName(terrainType: MapTerrainType): string {
+  // Generate map name based on terrain type and subtype/story
+  private generateMapName(options: MapGenerationOptions): string {
+    const { terrainType, subtype, story } = options;
+    
+    // If house with subtype, use subtype name and story
+    if (terrainType === MapTerrainType.HOUSE && subtype && story) {
+      const houseConfig = this.houseConfigs.get(subtype as HouseSubtype);
+      if (houseConfig) {
+        const storyName = story === HouseStory.BASEMENT ? 'Basement' :
+                         story === HouseStory.STORY_1 ? 'First Floor' :
+                         story === HouseStory.STORY_2 ? 'Second Floor' :
+                         story === HouseStory.STORY_3 ? 'Third Floor' : '';
+        
+        return `${houseConfig.name} - ${storyName}`;
+      }
+    }
+    
     const prefixes: { [key in MapTerrainType]: string[] } = {
       [MapTerrainType.HOUSE]: ['Cozy', 'Grand', 'Ancient', 'Mysterious', 'Humble'],
       [MapTerrainType.FOREST]: ['Enchanted', 'Dark', 'Whispering', 'Ancient', 'Moonlit'],
@@ -534,23 +865,103 @@ export class MapGenerationService {
    * - Creates exact number of rooms (not limited to powers of 2)
    * - Connects rooms using BSP tree structure
    * - Fills gaps with Dijkstra pathfinding
+   * - Supports house subtype configurations
    */
   private generateBSPRooms(options: MapGenerationOptions): GeneratedRoom[] {
-    const { width, height, numberOfRooms } = options;
+    const { width, height, terrainType, subtype, story } = options;
+    
+    // Create modified options based on house configuration if applicable
+    let modifiedOptions = { ...options };
+    
+    // Override room sizes (but NOT numberOfRooms) with house configuration if applicable
+    if (terrainType === MapTerrainType.HOUSE && subtype && story) {
+      const houseConfig = this.houseConfigs.get(subtype as HouseSubtype);
+      if (houseConfig) {
+        const storyConfig = houseConfig.stories.find(s => s.story === story);
+        if (storyConfig) {
+          modifiedOptions = {
+            ...options,
+            // Keep user's numberOfRooms choice, only override sizes
+            minRoomSize: storyConfig.minRoomSize,
+            maxRoomSize: storyConfig.maxRoomSize
+          };
+        }
+      }
+    }
+    
+    const { numberOfRooms } = modifiedOptions;
     
     // Calculate BSP iterations needed
     const iterations = this.calculateBSPIterations(numberOfRooms);
     
+    // For Wizard Tower, constrain the BSP container to fit within the main tower circle
+    let containerX = 2;
+    let containerY = 2;
+    let containerW = width - 4;
+    let containerH = height - 4;
+    
+    if (terrainType === MapTerrainType.HOUSE && subtype === HouseSubtype.WIZARD_TOWER) {
+      // Main tower is 35% of map size, centered
+      const mainTowerRadius = Math.min(width, height) * 0.35;
+      const centerX = width / 2;
+      const centerY = height / 2;
+      
+      // Inscribe a square within the circle (use ~70% of diameter to ensure rooms fit)
+      const inscribedSquareSize = mainTowerRadius * 2 * 0.7;
+      containerX = Math.floor(centerX - inscribedSquareSize / 2);
+      containerY = Math.floor(centerY - inscribedSquareSize / 2);
+      containerW = Math.floor(inscribedSquareSize);
+      containerH = Math.floor(inscribedSquareSize);
+    }
+    
     // Create BSP tree with hybrid splitting (stops early for exact room count)
-    const mainContainer = new BSPContainer(2, 2, width - 4, height - 4);
+    const mainContainer = new BSPContainer(containerX, containerY, containerW, containerH);
     const tree = this.splitContainerHybrid(mainContainer, iterations, numberOfRooms);
     
     // Get leaf containers and create rooms
-    const leafs = tree.getLeafs();
+    let leafs = tree.getLeafs();
+    
+    // IMPORTANT: Trim or add leafs to match exact room count
+    if (leafs.length > numberOfRooms) {
+      // Too many rooms - randomly remove some
+      while (leafs.length > numberOfRooms) {
+        const removeIndex = Math.floor(this.random() * leafs.length);
+        leafs.splice(removeIndex, 1);
+      }
+    } else if (leafs.length < numberOfRooms) {
+      // Too few rooms - split the largest containers
+      while (leafs.length < numberOfRooms) {
+        // Find the largest leaf
+        let largestIndex = 0;
+        let largestArea = leafs[0].w * leafs[0].h;
+        
+        for (let i = 1; i < leafs.length; i++) {
+          const area = leafs[i].w * leafs[i].h;
+          if (area > largestArea) {
+            largestArea = area;
+            largestIndex = i;
+          }
+        }
+        
+        // Split the largest container
+        const containerToSplit = leafs[largestIndex];
+        const [r1, r2] = this.randomSplitContainer(containerToSplit);
+        
+        if (r1 && r2) {
+          // Replace the container with its two children
+          leafs.splice(largestIndex, 1);
+          leafs.push(r1, r2);
+        } else {
+          // Can't split anymore - stop
+          break;
+        }
+      }
+    }
+    
     const rooms: GeneratedRoom[] = [];
     
     for (const container of leafs) {
-      const room = this.createRoomInContainer(container, options);
+      const room = this.createRoomInContainer(container, modifiedOptions);
       container.room = room;
       rooms.push(room);
     }
@@ -686,10 +1097,19 @@ export class MapGenerationService {
       roomType = dungeonRooms[Math.floor(this.random() * dungeonRooms.length)];
     }
     
+    // Determine room shape based on house configuration
+    let roomShape: 'rectangle' | 'circle' = 'rectangle';
+    if (options.terrainType === MapTerrainType.HOUSE && options.subtype) {
+      const houseConfig = this.houseConfigs.get(options.subtype as HouseSubtype);
+      if (houseConfig && houseConfig.roomShape === 'circle') {
+        roomShape = 'circle';
+      }
+    }
+    
     return {
       id: uuidv4(),
       type: roomType,
-      shape: { type: 'rectangle' },
+      shape: { type: roomShape },
       position: { x: roomX, y: roomY },
       size: { width: roomW, height: roomH },
       doors: []
@@ -1507,12 +1927,69 @@ export class MapGenerationService {
   }
 
   // Create background layer
-  private createBackgroundLayer(colorTheme: TerrainColorTheme): MapLayer {
+  private createBackgroundLayer(colorTheme: TerrainColorTheme, options: MapGenerationOptions): MapLayer {
+    const objects: MapObject[] = [];
+    
+    // Special handling for Wizard Tower - add circular tower structures
+    if (options.terrainType === MapTerrainType.HOUSE && options.subtype === HouseSubtype.WIZARD_TOWER) {
+      const { width, height } = options;
+      
+      // Main tower - large circle in center
+      const mainTowerRadius = Math.min(width, height) * 0.35;
+      const mainTowerX = width / 2;
+      const mainTowerY = height / 2;
+      
+      objects.push({
+        id: uuidv4(),
+        type: ObjectType.DECORATION,
+        position: { x: mainTowerX - mainTowerRadius, y: mainTowerY - mainTowerRadius },
+        size: { width: mainTowerRadius * 2, height: mainTowerRadius * 2 },
+        name: 'main_tower',
+        color: colorTheme.pathColor,
+        properties: {
+          shape: { type: 'circle' },
+          isTower: true,
+          towerType: 'main'
+        },
+        isVisible: true,
+        isInteractive: false
+      });
+      
+      // Randomly add 1-2 smaller towers
+      const numSmallTowers = Math.floor(this.random() * 2) + 1; // 1 or 2 towers
+      
+      for (let i = 0; i < numSmallTowers; i++) {
+        const smallTowerRadius = mainTowerRadius * (0.3 + this.random() * 0.2); // 30-50% of main tower
+        
+        // Position around the main tower
+        const angle = (i / numSmallTowers) * Math.PI * 2 + this.random() * 0.5;
+        const distance = mainTowerRadius * 0.8;
+        const smallTowerX = mainTowerX + Math.cos(angle) * distance;
+        const smallTowerY = mainTowerY + Math.sin(angle) * distance;
+        
+        objects.push({
+          id: uuidv4(),
+          type: ObjectType.DECORATION,
+          position: { x: smallTowerX - smallTowerRadius, y: smallTowerY - smallTowerRadius },
+          size: { width: smallTowerRadius * 2, height: smallTowerRadius * 2 },
+          name: `small_tower_${i}`,
+          color: colorTheme.pathColor,
+          properties: {
+            shape: { type: 'circle' },
+            isTower: true,
+            towerType: 'small'
+          },
+          isVisible: true,
+          isInteractive: false
+        });
+      }
+    }
+    
     return {
       id: uuidv4(),
       name: 'Background',
       type: LayerType.BACKGROUND,
-      objects: [],
+      objects,
       isVisible: true,
       isLocked: false,
       opacity: 1
@@ -1647,11 +2124,11 @@ export class MapGenerationService {
       description: 'Resizable grid overlay',
       isVisible: true,
       isInteractive: true,
-      opacity: 0.15, // Reduced from 0.3 to be less visible
+      opacity: 1.0, // Full opacity - layer opacity will control visibility
       properties: {
         gridType: 'square',
         cellSize: 1, // 1 grid cell = 1 unit
-        lineColor: { r: 150, g: 150, b: 150, a: 0.15 }, // Lighter and more transparent
+        lineColor: { r: 0, g: 0, b: 0, a: 1.0 }, // Black grid lines
         lineWidth: 1
       }
     };
@@ -1663,7 +2140,7 @@ export class MapGenerationService {
       objects: [gridObject],
       isVisible: true,
       isLocked: false,
-      opacity: 0.15 // Reduced from 0.3
+      opacity: 1.0 // Start at 100% opacity
     };
   }
 
@@ -1907,29 +2384,12 @@ export class MapGenerationService {
 
   // Create objects layer with terrain-appropriate objects
   private createObjectsLayer(rooms: GeneratedRoom[], options: MapGenerationOptions): MapLayer {
-    const objects: MapObject[] = [];
-    const objectSet = this.terrainObjectSets.get(options.terrainType);
-    
-    if (!objectSet) return {
-      id: uuidv4(),
-      name: 'Objects',
-      type: LayerType.OBJECTS,
-      objects: [],
-      isVisible: true,
-      isLocked: false,
-      opacity: 1
-    };
-    
-    // Place objects in rooms
-    rooms.forEach(room => {
-      this.placeObjectsInRoom(room, objectSet, options.objectDensity, objects);
-    });
-    
+    // Return empty layer - users will place their own objects
     return {
       id: uuidv4(),
       name: 'Objects',
       type: LayerType.OBJECTS,
-      objects,
+      objects: [],
       isVisible: true,
       isLocked: false,
       opacity: 1

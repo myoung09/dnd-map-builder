@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Stage, Layer, Rect, Group, Text, Line } from 'react-konva';
+import { Stage, Layer, Rect, Circle, Group, Text, Line } from 'react-konva';
 import Konva from 'konva';
 import { DnDMap, ToolType, ViewportState, ToolState } from '../../types/map';
 
@@ -150,9 +150,10 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
         // Handle grid objects specially
         if (obj.type === 'grid') {
           const gridLines: JSX.Element[] = [];
-          const lineColor = obj.properties?.lineColor || { r: 200, g: 200, b: 200, a: 0.3 };
+          const lineColor = obj.properties?.lineColor || { r: 0, g: 0, b: 0, a: 1.0 };
           const lineWidth = obj.properties?.lineWidth || 1;
-          const opacity = obj.opacity || 0.3;
+          // Use layer opacity (not object opacity) for grid visibility control
+          const opacity = layer.opacity !== undefined ? layer.opacity : 1.0;
           
           // Get terrain cells to only draw grid over them
           const terrainCells = getTerrainCells();
@@ -242,21 +243,35 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
         // Determine how to render this object
         if (obj.properties?.emoji) {
           // Render emoji-based object
+          const isCircle = obj.properties?.shape?.type === 'circle';
+          
           allObjects.push(
             <Group key={obj.id}>
-              {/* Background shape for rooms/paths */}
-              {(obj.name.includes('room') || obj.name.includes('path') || obj.name.includes('streets')) && (
-                <Rect
-                  x={x}
-                  y={y}
-                  width={width}
-                  height={height}
-                  fill={obj.color ? `rgb(${obj.color.r}, ${obj.color.g}, ${obj.color.b})` : '#cccccc'}
-                  stroke={isSelected ? '#0088ff' : 'transparent'}
-                  strokeWidth={isSelected ? 2 : 0}
-                  cornerRadius={obj.name.includes('room') ? 4 : 0}
-                  objectId={obj.id}
-                />
+              {/* Background shape for rooms/paths/towers */}
+              {(obj.name.includes('room') || obj.name.includes('path') || obj.name.includes('streets') || obj.name.includes('tower')) && (
+                isCircle ? (
+                  <Circle
+                    x={x + width / 2}
+                    y={y + height / 2}
+                    radius={Math.min(width, height) / 2}
+                    fill={obj.color ? `rgb(${obj.color.r}, ${obj.color.g}, ${obj.color.b})` : '#cccccc'}
+                    stroke={isSelected ? '#0088ff' : 'transparent'}
+                    strokeWidth={isSelected ? 2 : 0}
+                    objectId={obj.id}
+                  />
+                ) : (
+                  <Rect
+                    x={x}
+                    y={y}
+                    width={width}
+                    height={height}
+                    fill={obj.color ? `rgb(${obj.color.r}, ${obj.color.g}, ${obj.color.b})` : '#cccccc'}
+                    stroke={isSelected ? '#0088ff' : 'transparent'}
+                    strokeWidth={isSelected ? 2 : 0}
+                    cornerRadius={obj.name.includes('room') ? 4 : 0}
+                    objectId={obj.id}
+                  />
+                )
               )}
               
               {/* Emoji icon */}
@@ -290,8 +305,8 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
               objectId={obj.id}
             />
           );
-        } else if (obj.name.includes('room') || obj.name.includes('path') || obj.name.includes('streets')) {
-          // Render room/path shapes
+        } else if (obj.name.includes('room') || obj.name.includes('path') || obj.name.includes('streets') || obj.name.includes('tower')) {
+          // Render room/path/tower shapes
           const fillColor = obj.color ? `rgb(${obj.color.r}, ${obj.color.g}, ${obj.color.b})` : '#cccccc';
           
           // Check if this is an organic curved path
@@ -396,25 +411,48 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
               />
             );
           } else {
-            // Regular rectangular shape
-            // Corridors should have no stroke to avoid grid lines
+            // Regular shape - check if circle or rectangle
             const isCorridor = obj.properties?.isCorridor === true;
+            const isCircle = obj.properties?.shape?.type === 'circle';
             
-            allObjects.push(
-              <Rect
-                key={obj.id}
-                x={x}
-                y={y}
-                width={width}
-                height={height}
-                fill={fillColor}
-                stroke={isSelected ? '#0088ff' : (isCorridor ? undefined : '#666666')}
-                strokeWidth={isSelected ? 2 : (isCorridor ? 0 : 1)}
-                cornerRadius={obj.name.includes('room') ? 4 : 0}
-                objectId={obj.id}
-                perfectDrawEnabled={false}
-              />
-            );
+            if (isCircle) {
+              // Render as circle
+              const centerX = x + width / 2;
+              const centerY = y + height / 2;
+              const radius = Math.min(width, height) / 2;
+              
+              allObjects.push(
+                <Circle
+                  key={obj.id}
+                  x={centerX}
+                  y={centerY}
+                  radius={radius}
+                  fill={fillColor}
+                  stroke={isSelected ? '#0088ff' : '#666666'}
+                  strokeWidth={isSelected ? 2 : 1}
+                  objectId={obj.id}
+                  perfectDrawEnabled={false}
+                />
+              );
+            } else {
+              // Regular rectangular shape
+              // Corridors should have no stroke to avoid grid lines
+              allObjects.push(
+                <Rect
+                  key={obj.id}
+                  x={x}
+                  y={y}
+                  width={width}
+                  height={height}
+                  fill={fillColor}
+                  stroke={isSelected ? '#0088ff' : (isCorridor ? undefined : '#666666')}
+                  strokeWidth={isSelected ? 2 : (isCorridor ? 0 : 1)}
+                  cornerRadius={obj.name.includes('room') ? 4 : 0}
+                  objectId={obj.id}
+                  perfectDrawEnabled={false}
+                />
+              );
+            }
           }
         }
       });

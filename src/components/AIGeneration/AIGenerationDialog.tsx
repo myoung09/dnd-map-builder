@@ -34,7 +34,13 @@ import {
 import { DnDMap } from '../../types/map';
 import { AIGenerationOptions, AIGenerationResult, aiMapGenerationService } from '../../services/aiGenerationService';
 import { AI_GENERATION } from '../../utils/constants';
-import { MapTerrainType, mapGenerationService, MapGenerationOptions } from '../../services/mapGenerationService';
+import { 
+  MapTerrainType, 
+  HouseSubtype, 
+  HouseStory, 
+  mapGenerationService, 
+  MapGenerationOptions 
+} from '../../services/mapGenerationService';
 
 interface AIGenerationDialogProps {
   open: boolean;
@@ -104,6 +110,9 @@ export const AIGenerationDialog: React.FC<AIGenerationDialogProps> = ({
 }) => {
   const [prompt, setPrompt] = useState('');
   const [mapType, setMapType] = useState<MapTerrainType>(MapTerrainType.DUNGEON);
+  const [houseSubtype, setHouseSubtype] = useState<HouseSubtype>(HouseSubtype.COTTAGE);
+  const [houseStory, setHouseStory] = useState<HouseStory>(HouseStory.STORY_1);
+  const [numberOfRooms, setNumberOfRooms] = useState<number>(5);
   const [options, setOptions] = useState<AIGenerationOptions>({
     mapSize: { width: 30, height: 30 },
     style: 'custom',
@@ -122,6 +131,52 @@ export const AIGenerationDialog: React.FC<AIGenerationDialogProps> = ({
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const availableStyles = aiMapGenerationService.getAvailableStyles();
+
+  // Helper to get max room count for current house config
+  const getMaxRoomCount = (): number => {
+    if (mapType !== MapTerrainType.HOUSE) {
+      return 20; // Default max for non-house types
+    }
+    
+    const config = mapGenerationService['houseConfigs'].get(houseSubtype);
+    if (!config) return 10;
+    
+    const storyConfig = config.stories.find(s => s.story === houseStory);
+    return storyConfig ? storyConfig.numberOfRooms : 10;
+  };
+
+  // Helper to get available stories for current house subtype
+  const getAvailableStories = (): HouseStory[] => {
+    if (mapType !== MapTerrainType.HOUSE) return [];
+    
+    const config = mapGenerationService['houseConfigs'].get(houseSubtype);
+    if (!config) return [HouseStory.STORY_1];
+    
+    return config.stories.map(s => s.story);
+  };
+
+  // Helper to get display name for house story
+  const getStoryDisplayName = (story: HouseStory): string => {
+    switch (story) {
+      case HouseStory.BASEMENT: return 'Basement';
+      case HouseStory.STORY_1: return 'First Floor';
+      case HouseStory.STORY_2: return 'Second Floor';
+      case HouseStory.STORY_3: return 'Third Floor';
+      default: return story;
+    }
+  };
+
+  // Helper to get display name for house subtype
+  const getHouseSubtypeDisplayName = (subtype: HouseSubtype): string => {
+    switch (subtype) {
+      case HouseSubtype.COTTAGE: return 'Cottage';
+      case HouseSubtype.MANOR: return 'Manor';
+      case HouseSubtype.INN: return 'Inn/Tavern';
+      case HouseSubtype.CASTLE: return 'Castle';
+      case HouseSubtype.WIZARD_TOWER: return 'Wizard Tower';
+      default: return subtype;
+    }
+  };
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
@@ -188,7 +243,9 @@ export const AIGenerationDialog: React.FC<AIGenerationDialogProps> = ({
         width: options.mapSize.width,
         height: options.mapSize.height,
         terrainType: mapType,
-        numberOfRooms: options.complexity === 'simple' ? 3 : options.complexity === 'moderate' ? 5 : 8,
+        subtype: mapType === MapTerrainType.HOUSE ? houseSubtype : undefined,
+        story: mapType === MapTerrainType.HOUSE ? houseStory : undefined,
+        numberOfRooms: numberOfRooms,
         minRoomSize: 3,
         maxRoomSize: options.complexity === 'simple' ? 6 : options.complexity === 'moderate' ? 8 : 12,
         organicFactor: mapType === MapTerrainType.CAVE || mapType === MapTerrainType.FOREST ? 0.7 : 0.3,
@@ -320,6 +377,114 @@ export const AIGenerationDialog: React.FC<AIGenerationDialogProps> = ({
               ))}
             </Box>
           </Box>
+
+          {/* House Subtype and Story Selection (only for HOUSE terrain) */}
+          {mapType === MapTerrainType.HOUSE && (
+            <Box>
+              <Typography variant="h6" gutterBottom>
+                House Configuration
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+                <FormControl fullWidth>
+                  <InputLabel>House Type</InputLabel>
+                  <Select
+                    value={houseSubtype}
+                    label="House Type"
+                    onChange={(e) => {
+                      const newSubtype = e.target.value as HouseSubtype;
+                      setHouseSubtype(newSubtype);
+                      // Reset to first available story when changing house type
+                      const config = mapGenerationService['houseConfigs'].get(newSubtype);
+                      if (config && config.stories.length > 0) {
+                        const newStory = config.stories[0].story;
+                        setHouseStory(newStory);
+                        setNumberOfRooms(config.stories[0].numberOfRooms);
+                      }
+                      setGeneration(prev => ({ ...prev, error: null }));
+                    }}
+                    disabled={generation.isGenerating}
+                  >
+                    {Object.values(HouseSubtype).map((subtype) => (
+                      <MenuItem key={subtype} value={subtype}>
+                        {getHouseSubtypeDisplayName(subtype)}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+
+                <FormControl fullWidth>
+                  <InputLabel>Floor/Story</InputLabel>
+                  <Select
+                    value={houseStory}
+                    label="Floor/Story"
+                    onChange={(e) => {
+                      const newStory = e.target.value as HouseStory;
+                      setHouseStory(newStory);
+                      // Reset room count to max for this story
+                      const config = mapGenerationService['houseConfigs'].get(houseSubtype);
+                      if (config) {
+                        const storyConfig = config.stories.find(s => s.story === newStory);
+                        if (storyConfig) {
+                          setNumberOfRooms(storyConfig.numberOfRooms);
+                        }
+                      }
+                      setGeneration(prev => ({ ...prev, error: null }));
+                    }}
+                    disabled={generation.isGenerating}
+                  >
+                    {getAvailableStories().map((story) => (
+                      <MenuItem key={story} value={story}>
+                        {getStoryDisplayName(story)}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Box>
+
+              <FormControl fullWidth>
+                <InputLabel>Number of Rooms</InputLabel>
+                <Select
+                  value={numberOfRooms}
+                  label="Number of Rooms"
+                  onChange={(e) => {
+                    setNumberOfRooms(e.target.value as number);
+                    setGeneration(prev => ({ ...prev, error: null }));
+                  }}
+                  disabled={generation.isGenerating}
+                >
+                  {Array.from({ length: getMaxRoomCount() }, (_, i) => i + 1).map((count) => (
+                    <MenuItem key={count} value={count}>
+                      {count} {count === 1 ? 'Room' : 'Rooms'}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Box>
+          )}
+
+          {/* General Room Count (for non-house terrains) */}
+          {mapType !== MapTerrainType.HOUSE && (
+            <Box>
+              <FormControl fullWidth>
+                <InputLabel>Number of Rooms</InputLabel>
+                <Select
+                  value={numberOfRooms}
+                  label="Number of Rooms"
+                  onChange={(e) => {
+                    setNumberOfRooms(e.target.value as number);
+                    setGeneration(prev => ({ ...prev, error: null }));
+                  }}
+                  disabled={generation.isGenerating}
+                >
+                  {Array.from({ length: 20 }, (_, i) => i + 1).map((count) => (
+                    <MenuItem key={count} value={count}>
+                      {count} {count === 1 ? 'Room' : 'Rooms'}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Box>
+          )}
 
           {/* Main Prompt Input */}
           <Box>
