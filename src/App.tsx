@@ -34,7 +34,7 @@ import {
   Map as MapIcon
 } from '@mui/icons-material';
 import NewMapCanvas from './components/MapCanvas/NewMapCanvas';
-import MapLegend from './components/MapLegend';
+// import MapLegend from './components/MapLegend'; // Temporarily hidden
 import MapToolbar from './components/Toolbar/Toolbar';
 import FileManager from './components/FileManager/FileManager';
 import ImageExportDialog from './components/ImageExport/ImageExportDialog';
@@ -294,7 +294,8 @@ function App() {
     }
   }, [showNotification]);
 
-  // Helper functions for map legend
+  // Helper functions for map legend - temporarily commented out
+  /*
   const getVisibleTerrainTypes = useCallback((map: DnDMap): TerrainType[] => {
     const terrainTypes = new Set<TerrainType>();
     
@@ -311,7 +312,10 @@ function App() {
     
     return Array.from(terrainTypes);
   }, []);
+  */
 
+  // Temporarily commented out - used by MapLegend which is hidden
+  /*
   const getMapEnvironmentType = useCallback((map: DnDMap): string => {
     // Check tags first for explicit environment type
     const tags = map.metadata.tags || [];
@@ -328,6 +332,7 @@ function App() {
     if (terrainTypes.includes(TerrainType.WALL) && terrainTypes.includes(TerrainType.FLOOR)) return 'dungeon';
     return 'dungeon'; // default
   }, [getVisibleTerrainTypes]);
+  */
 
   // Map editing handlers
   const handleMapChange = useCallback((map: DnDMap) => {
@@ -891,10 +896,12 @@ function App() {
                   zIndex: 1000,
                 }}
               >
+                {/* Legend temporarily hidden
                 <MapLegend
                   environmentType={getMapEnvironmentType(currentMap)}
                   visibleTerrainTypes={getVisibleTerrainTypes(currentMap)}
                 />
+                */}
               </Box>
             )}
           </Box>
