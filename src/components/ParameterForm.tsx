@@ -262,6 +262,19 @@ export const ParameterForm: React.FC<ParameterFormProps> = ({
               />
             </label>
           </div>
+
+          <div className="parameter-group">
+            <label>
+              Cave Roughness: {(parameters.caveRoughness || 1.0).toFixed(1)}
+              <input
+                type="range"
+                min="5"
+                max="20"
+                value={(parameters.caveRoughness || 1.0) * 10}
+                onChange={(e) => handleChange('caveRoughness', parseInt(e.target.value) / 10)}
+              />
+            </label>
+          </div>
         </>
       )}
     </div>

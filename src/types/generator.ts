@@ -60,6 +60,7 @@ export interface GeneratorParameters {
   fillProbability?: number;
   smoothIterations?: number;
   wallThreshold?: number;
+  caveRoughness?: number; // Multiplier for fillProbability (0.5-2.0). Higher = rougher caves
   
   // Dungeon parameters
   organicFactor?: number;

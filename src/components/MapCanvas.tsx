@@ -222,6 +222,8 @@ function drawCave(
 ) {
   if (!mapData.grid) return;
 
+  console.log(`[drawCave] Rendering ${mapData.width}x${mapData.height} cave with cellSize=${cellSize}`);
+
   for (let y = 0; y < mapData.height; y++) {
     for (let x = 0; x < mapData.width; x++) {
       const cell = mapData.grid[y][x];
@@ -229,23 +231,25 @@ function drawCave(
       const py = y * cellSize;
 
       if (cell === 0) {
-        // Floor - cave floor color
-        ctx.fillStyle = '#4a4a5a';
+        // Open space - lighter cave floor color with slight variation
+        // Use lighter grays/browns for open areas
+        ctx.fillStyle = '#6a6a7a'; // Medium-light gray-blue for open space
         ctx.fillRect(px, py, cellSize, cellSize);
         
-        // Add slight variation
+        // Add texture variation to floor
         if (Math.random() > 0.7) {
-          ctx.fillStyle = 'rgba(90, 90, 110, 0.3)';
+          ctx.fillStyle = 'rgba(110, 110, 130, 0.4)';
           ctx.fillRect(px, py, cellSize, cellSize);
         }
       } else {
-        // Wall - rock wall color
-        ctx.fillStyle = '#2a2a3a';
+        // Wall - darker rock wall color
+        // Use very dark colors for walls to create strong contrast
+        ctx.fillStyle = '#1a1a2a'; // Very dark blue-black for walls
         ctx.fillRect(px, py, cellSize, cellSize);
         
-        // Add organic edge roughening
+        // Add organic edge roughening for walls adjacent to open space
         if (hasFloorNeighbor(mapData.grid, x, y)) {
-          ctx.fillStyle = '#3a3a4a';
+          ctx.fillStyle = '#2a2a3a'; // Slightly lighter dark for edge variation
           const offset = Math.random() * cellSize * 0.3;
           ctx.fillRect(px, py, cellSize - offset, cellSize - offset);
         }

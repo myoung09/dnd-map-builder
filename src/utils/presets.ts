@@ -91,7 +91,8 @@ export const PRESETS: Preset[] = [
       height: 70,
       fillProbability: 0.45,
       smoothIterations: 4,
-      wallThreshold: 5
+      wallThreshold: 4,
+      caveRoughness: 1.0 // Balanced cave with moderate roughness
     }
   },
   {
@@ -102,7 +103,20 @@ export const PRESETS: Preset[] = [
       height: 120,
       fillProbability: 0.42,
       smoothIterations: 5,
-      wallThreshold: 4
+      wallThreshold: 4,
+      caveRoughness: 0.9 // Slightly smoother for larger caves
+    }
+  },
+  {
+    name: 'Rough Cavern',
+    terrainType: TerrainType.Cave,
+    parameters: {
+      width: 80,
+      height: 80,
+      fillProbability: 0.48,
+      smoothIterations: 3,
+      wallThreshold: 4,
+      caveRoughness: 1.4 // Rougher, more jagged walls
     }
   }
 ];
