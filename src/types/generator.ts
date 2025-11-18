@@ -65,6 +65,7 @@ export interface GeneratorParameters {
   // Dungeon parameters
   organicFactor?: number;
   connectivityFactor?: number;
+  walkSteps?: number; // Random walk bias (1-10). Higher = straighter corridors. Default 7
 }
 
 export interface Preset {

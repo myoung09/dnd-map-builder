@@ -161,6 +161,19 @@ export const ParameterForm: React.FC<ParameterFormProps> = ({
               />
             </label>
           </div>
+
+          <div className="parameter-group">
+            <label>
+              Corridor Straightness: {parameters.walkSteps || 7}
+              <input
+                type="range"
+                min="1"
+                max="10"
+                value={parameters.walkSteps || 7}
+                onChange={(e) => handleChange('walkSteps', parseInt(e.target.value))}
+              />
+            </label>
+          </div>
         </>
       )}
 

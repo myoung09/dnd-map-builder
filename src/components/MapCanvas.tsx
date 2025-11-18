@@ -267,8 +267,11 @@ function drawDungeon(
 ) {
   if (!mapData.grid) return;
 
+  console.log(`[drawDungeon] Rendering ${mapData.width}x${mapData.height} dungeon with ${mapData.rooms?.length || 0} rooms`);
+
   const isHouse = mapData.terrainType === TerrainType.House;
 
+  // Draw grid-based terrain (rooms and corridors)
   for (let y = 0; y < mapData.height; y++) {
     for (let x = 0; x < mapData.width; x++) {
       const cell = mapData.grid[y][x];
@@ -276,35 +279,55 @@ function drawDungeon(
       const py = y * cellSize;
 
       if (cell === 0) {
-        // Floor
+        // Floor - determine if room or corridor
+        let isInRoom = false;
+        if (mapData.rooms) {
+          for (const room of mapData.rooms) {
+            if (x >= room.x && x < room.x + room.width &&
+                y >= room.y && y < room.y + room.height) {
+              isInRoom = true;
+              break;
+            }
+          }
+        }
+
+        // Draw floor with different colors for rooms vs corridors
         if (showRooms || showCorridors) {
-          ctx.fillStyle = isHouse ? '#d4c4a8' : '#6a6a6a';
+          if (isInRoom) {
+            // Room floor - lighter, more prominent
+            ctx.fillStyle = isHouse ? '#d4c4a8' : '#7a7a7a';
+          } else {
+            // Corridor floor - slightly darker for contrast
+            ctx.fillStyle = isHouse ? '#c4b498' : '#6a6a6a';
+          }
           ctx.fillRect(px, py, cellSize, cellSize);
           
           // Add texture variation
           if (Math.random() > 0.8) {
-            ctx.fillStyle = isHouse ? 'rgba(220, 200, 180, 0.5)' : 'rgba(100, 100, 100, 0.3)';
+            ctx.fillStyle = isInRoom 
+              ? (isHouse ? 'rgba(220, 200, 180, 0.5)' : 'rgba(130, 130, 130, 0.4)')
+              : (isHouse ? 'rgba(200, 180, 160, 0.5)' : 'rgba(100, 100, 100, 0.3)');
             ctx.fillRect(px, py, cellSize, cellSize);
           }
         }
       } else {
-        // Wall
-        ctx.fillStyle = isHouse ? '#8b7355' : '#3a3a3a';
+        // Wall - darker for strong contrast
+        ctx.fillStyle = isHouse ? '#8b7355' : '#2a2a2a';
         ctx.fillRect(px, py, cellSize, cellSize);
         
-        // Add depth to walls
+        // Add depth to walls adjacent to floors
         if (hasFloorNeighbor(mapData.grid, x, y)) {
-          ctx.fillStyle = isHouse ? '#6d5a45' : '#2a2a2a';
+          ctx.fillStyle = isHouse ? '#6d5a45' : '#1a1a1a';
           ctx.fillRect(px + 1, py + 1, cellSize - 2, cellSize - 2);
         }
       }
     }
   }
 
-  // Draw room outlines
+  // Draw room rectangles with outlines for clarity
   if (showRooms && mapData.rooms) {
-    ctx.strokeStyle = isHouse ? 'rgba(139, 115, 85, 0.8)' : 'rgba(255, 255, 255, 0.3)';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = isHouse ? 'rgba(139, 115, 85, 0.6)' : 'rgba(255, 255, 255, 0.2)';
+    ctx.lineWidth = 2;
     
     for (const room of mapData.rooms) {
       ctx.strokeRect(
@@ -313,6 +336,27 @@ function drawDungeon(
         room.width * cellSize,
         room.height * cellSize
       );
+    }
+  }
+
+  // Draw corridor paths for visualization
+  if (showCorridors && mapData.corridors) {
+    ctx.strokeStyle = isHouse ? 'rgba(160, 140, 120, 0.4)' : 'rgba(100, 150, 200, 0.3)';
+    ctx.lineWidth = Math.max(1, cellSize / 3);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    for (const corridor of mapData.corridors) {
+      ctx.beginPath();
+      ctx.moveTo(
+        corridor.start[0] * cellSize + cellSize / 2,
+        corridor.start[1] * cellSize + cellSize / 2
+      );
+      ctx.lineTo(
+        corridor.end[0] * cellSize + cellSize / 2,
+        corridor.end[1] * cellSize + cellSize / 2
+      );
+      ctx.stroke();
     }
   }
 }

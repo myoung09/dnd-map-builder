@@ -41,7 +41,8 @@ export const PRESETS: Preset[] = [
       corridorWidth: 1,
       gridSize: 4,
       organicFactor: 0.2,
-      connectivityFactor: 0.1
+      connectivityFactor: 0.1,
+      walkSteps: 7 // Balanced corridor straightness
     }
   },
   {
@@ -56,7 +57,24 @@ export const PRESETS: Preset[] = [
       corridorWidth: 2,
       gridSize: 4,
       organicFactor: 0.4,
-      connectivityFactor: 0.2
+      connectivityFactor: 0.2,
+      walkSteps: 6 // Slightly more wandering for larger dungeon
+    }
+  },
+  {
+    name: 'Winding Dungeon',
+    terrainType: TerrainType.Dungeon,
+    parameters: {
+      width: 100,
+      height: 100,
+      minRoomSize: 5,
+      maxRoomSize: 12,
+      roomCount: 12,
+      corridorWidth: 1,
+      gridSize: 4,
+      organicFactor: 0.5,
+      connectivityFactor: 0.25,
+      walkSteps: 4 // Very organic, winding corridors
     }
   },
   {
