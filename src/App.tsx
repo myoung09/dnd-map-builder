@@ -2,13 +2,14 @@ import React, { useState, useRef, useCallback } from 'react';
 import './App.css';
 import { TerrainType, GeneratorParameters, MapData } from './types/generator';
 import { TerrainSelector } from './components/TerrainSelector';
+import { PresetSelector } from './components/PresetSelector';
 import { ParameterForm } from './components/ParameterForm';
 import { MapCanvas, MapCanvasRef } from './components/MapCanvas';
 import { HouseGenerator } from './generators/HouseGenerator';
 import { ForestGenerator } from './generators/ForestGenerator';
 import { CaveGenerator } from './generators/CaveGenerator';
 import { DungeonGenerator } from './generators/DungeonGenerator';
-import { PRESETS, getPresetsByTerrain } from './utils/presets';
+import { getPresetByName, getPresetsByTerrain } from './utils/presets';
 import { ExportUtils } from './utils/export';
 
 function App() {
@@ -71,7 +72,7 @@ function App() {
   };
 
   const handlePresetLoad = (presetName: string) => {
-    const preset = PRESETS.find(p => p.name === presetName);
+    const preset = getPresetByName(presetName);
     if (preset) {
       setTerrain(preset.terrainType);
       setParameters({
@@ -79,13 +80,6 @@ function App() {
         seed: Date.now()
       });
     }
-  };
-
-  const handleRandomSeed = () => {
-    setParameters({
-      ...parameters,
-      seed: Date.now()
-    });
   };
 
   const handleExportPNG = () => {
@@ -127,8 +121,6 @@ function App() {
     }
   };
 
-  const availablePresets = getPresetsByTerrain(terrain);
-
   return (
     <div className="App">
       <header className="App-header">
@@ -146,19 +138,10 @@ function App() {
           </section>
 
           <section className="control-section">
-            <h3>Presets</h3>
-            <select 
-              className="preset-select"
-              onChange={(e) => handlePresetLoad(e.target.value)}
-              value=""
-            >
-              <option value="">Select a preset...</option>
-              {availablePresets.map(preset => (
-                <option key={preset.name} value={preset.name}>
-                  {preset.name}
-                </option>
-              ))}
-            </select>
+            <PresetSelector
+              currentTerrain={terrain}
+              onPresetSelect={handlePresetLoad}
+            />
           </section>
 
           <section className="control-section">
@@ -167,22 +150,6 @@ function App() {
               parameters={parameters}
               onParameterChange={setParameters}
             />
-          </section>
-
-          <section className="control-section">
-            <h3>Seed Control</h3>
-            <div className="seed-controls">
-              <input
-                type="number"
-                value={parameters.seed || 0}
-                onChange={(e) => setParameters({
-                  ...parameters,
-                  seed: parseInt(e.target.value)
-                })}
-                style={{ width: '150px' }}
-              />
-              <button onClick={handleRandomSeed}>Random</button>
-            </div>
           </section>
 
           <section className="control-section">
