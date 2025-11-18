@@ -1,20 +1,24 @@
 # Forest Rendering Debug Guide
 
 ## Issue
+
 The forest is rendering as a solid color instead of showing individual trees with clearings.
 
 ## Changes Made
 
 ### 1. Background Color
+
 - **Changed**: Forest background from dark green `#1a3a1a` to light tan/brown `#d4c5a0`
 - **Reason**: Clearings should be visible as the base color, trees drawn on top
 
 ### 2. Tree Rendering
+
 - **Method**: Individual circles drawn at tree coordinates
 - **Layers**: 3-layer rendering (base dark green, middle green, highlight)
 - **Size**: Based on `tree.size` parameter (calculated from Perlin noise)
 
 ### 3. Tree Radius Parameter
+
 - **Added**: `treeRadius` parameter (0.5-5.0, default 1.5)
 - **UI**: Slider in parameter form (0.5-5.0 range)
 - **Presets**: Updated with appropriate values
@@ -22,32 +26,49 @@ The forest is rendering as a solid color instead of showing individual trees wit
 ### 4. Logging Added
 
 #### Generator Logging (ForestGenerator.ts)
+
 ```typescript
 console.log(`[ForestGenerator] Generated ${points.length} Poisson points`);
 console.log(`[ForestGenerator] Map size: ${this.width}x${this.height}`);
-console.log(`[ForestGenerator] Parameters:`, { treeDensity, minTreeDistance, noiseScale, treeRadius });
-console.log(`[ForestGenerator] Created ${trees.length} trees from ${points.length} points`);
+console.log(`[ForestGenerator] Parameters:`, {
+  treeDensity,
+  minTreeDistance,
+  noiseScale,
+  treeRadius,
+});
+console.log(
+  `[ForestGenerator] Created ${trees.length} trees from ${points.length} points`
+);
 console.log(`[ForestGenerator] Sample trees:`, trees.slice(0, 3));
 console.log(`[ForestGenerator] Returning map data with ${trees.length} trees`);
 ```
 
 #### Rendering Logging (MapCanvas.tsx)
+
 ```typescript
 console.log(`[MapCanvas] Rendering Forest terrain`);
-console.log(`[drawForest] Called with showTrees=${showTrees}, trees count=${mapData.trees?.length || 0}`);
+console.log(
+  `[drawForest] Called with showTrees=${showTrees}, trees count=${
+    mapData.trees?.length || 0
+  }`
+);
 console.log(`[drawForest] cellSize=${cellSize}`);
 console.log(`[drawForest] Drawing ${mapData.trees.length} trees`);
 console.log(`[drawForest] Sample trees:`, mapData.trees.slice(0, 3));
-console.log(`[drawForest] First tree: pos=(${centerX}, ${centerY}), radius=${radius}`);
+console.log(
+  `[drawForest] First tree: pos=(${centerX}, ${centerY}), radius=${radius}`
+);
 ```
 
 ## How to Debug
 
 ### 1. Open Browser Console
+
 - Generate a forest map
 - Check the console output
 
 ### 2. Expected Console Output
+
 ```
 [ForestGenerator] Generated 450 Poisson points
 [ForestGenerator] Map size: 100x100
@@ -66,23 +87,27 @@ console.log(`[drawForest] First tree: pos=(${centerX}, ${centerY}), radius=${rad
 ### 3. Check These Values
 
 #### If trees.length is 0:
+
 - **Problem**: Perlin noise threshold too high (no trees pass the filter)
 - **Solution**: Increase `treeDensity` parameter (try 0.5 or higher)
 
 #### If Poisson points is very low:
+
 - **Problem**: Map too small or `minTreeDistance` too large
 - **Solution**: Increase map size or decrease `minTreeDistance`
 
 #### If trees exist but not visible:
+
 - **Problem**: Rendering issue (cellSize, coordinates, or canvas size)
-- **Check**: 
+- **Check**:
   - Is `showTrees` toggle enabled?
   - Are tree coordinates within canvas bounds?
   - Is cellSize appropriate for tree radius?
 
 #### If background is solid color:
+
 - **Problem**: Trees might be rendering but very small/invisible
-- **Check**: 
+- **Check**:
   - Tree radius calculation
   - cellSize value
   - Canvas dimensions
@@ -90,12 +115,14 @@ console.log(`[drawForest] First tree: pos=(${centerX}, ${centerY}), radius=${rad
 ## Visual Expectations
 
 ### Correct Rendering
+
 - Light tan/brown background (clearings)
 - Dark green circles scattered across canvas (trees)
 - Trees have 3 layers (dark base, medium middle, light highlight)
 - Clear empty spaces between trees
 
 ### Incorrect Rendering (Solid Color)
+
 - Entire canvas one color
 - No visible individual trees
 - No clearings visible
@@ -103,6 +130,7 @@ console.log(`[drawForest] First tree: pos=(${centerX}, ${centerY}), radius=${rad
 ## Test Parameters
 
 ### For Visible Trees
+
 ```typescript
 {
   width: 100,
@@ -116,6 +144,7 @@ console.log(`[drawForest] First tree: pos=(${centerX}, ${centerY}), radius=${rad
 ```
 
 ### For Debugging
+
 ```typescript
 {
   width: 50,              // Smaller map
@@ -131,24 +160,29 @@ console.log(`[drawForest] First tree: pos=(${centerX}, ${centerY}), radius=${rad
 ## Common Issues and Solutions
 
 ### Issue: "No trees generated"
+
 **Symptoms**: `Created 0 trees from X points`
 **Cause**: `treeDensity` too low or Perlin noise values unfavorable
 **Solution**: Increase `treeDensity` to 0.5+
 
 ### Issue: "Trees exist but canvas is solid"
+
 **Symptoms**: Trees in data, but rendering looks uniform
 **Cause**: Background and tree colors too similar, or trees too small
-**Solution**: 
+**Solution**:
+
 - Check background color is `#d4c5a0` (tan)
 - Check tree colors are green shades
 - Increase `treeRadius`
 
 ### Issue: "Very few Poisson points"
+
 **Symptoms**: `Generated 10 Poisson points` (very low)
 **Cause**: `minTreeDistance` too large for map size
 **Solution**: Decrease `minTreeDistance` or increase map size
 
 ### Issue: "Trees render outside canvas"
+
 **Symptoms**: Console shows large coordinates
 **Cause**: Tree coordinates exceed map dimensions
 **Solution**: Check tree.x < width and tree.y < height
@@ -156,19 +190,23 @@ console.log(`[drawForest] First tree: pos=(${centerX}, ${centerY}), radius=${rad
 ## Files Modified
 
 1. **src/generators/ForestGenerator.ts**
+
    - Added logging for generation process
    - Added `treeRadius` parameter
    - Updated tree size calculation
 
 2. **src/components/MapCanvas.tsx**
+
    - Changed forest background color to `#d4c5a0`
    - Added logging for rendering process
    - Updated tree rendering with 3 layers
 
 3. **src/types/generator.ts**
+
    - Added `treeRadius` parameter to interface
 
 4. **src/components/ParameterForm.tsx**
+
    - Added Tree Radius slider (0.5-5.0 range)
 
 5. **src/utils/presets.ts**
@@ -186,6 +224,7 @@ console.log(`[drawForest] First tree: pos=(${centerX}, ${centerY}), radius=${rad
 ## Expected Behavior
 
 After generating a forest, you should see:
+
 - Tan/brown background (forest floor)
 - Green circles scattered across the map (individual trees)
 - Varying tree sizes (based on Perlin noise)
