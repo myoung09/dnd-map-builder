@@ -54,6 +54,7 @@ export interface GeneratorParameters {
   treeDensity?: number;
   minTreeDistance?: number;
   noiseScale?: number;
+  treeRadius?: number; // Radius of individual tree circles
   
   // Cave parameters
   fillProbability?: number;

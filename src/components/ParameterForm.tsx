@@ -205,6 +205,19 @@ export const ParameterForm: React.FC<ParameterFormProps> = ({
               />
             </label>
           </div>
+
+          <div className="parameter-group">
+            <label>
+              Tree Radius: {(parameters.treeRadius || 1.5).toFixed(1)}
+              <input
+                type="range"
+                min="5"
+                max="50"
+                value={(parameters.treeRadius || 1.5) * 10}
+                onChange={(e) => handleChange('treeRadius', parseInt(e.target.value) / 10)}
+              />
+            </label>
+          </div>
         </>
       )}
 

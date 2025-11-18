@@ -75,10 +75,13 @@ export const MapCanvas = forwardRef<MapCanvasRef, MapCanvasProps>(({
 
     // Draw terrain based on type
     if (mapData.terrainType === TerrainType.Forest) {
+      console.log(`[MapCanvas] Rendering Forest terrain`);
       drawForest(terrainCtx, mapData, cellSize, showTrees);
     } else if (mapData.terrainType === TerrainType.Cave) {
+      console.log(`[MapCanvas] Rendering Cave terrain`);
       drawCave(terrainCtx, mapData, cellSize);
     } else if (mapData.terrainType === TerrainType.House || mapData.terrainType === TerrainType.Dungeon) {
+      console.log(`[MapCanvas] Rendering House/Dungeon terrain`);
       drawDungeon(terrainCtx, mapData, cellSize, showRooms, showCorridors);
     }
 
@@ -116,7 +119,7 @@ function drawBackground(
   // Background color based on terrain
   const colors: Record<string, string> = {
     [TerrainType.House]: '#2c2c2c',
-    [TerrainType.Forest]: '#1a3a1a',
+    [TerrainType.Forest]: '#d4c5a0', // Light brown/tan for forest floor (clearings)
     [TerrainType.Cave]: '#1a1a2e',
     [TerrainType.Dungeon]: '#1a1a1a'
   };
@@ -155,25 +158,60 @@ function drawForest(
   cellSize: number,
   showTrees: boolean
 ) {
-  if (!showTrees || !mapData.trees) return;
+  console.log(`[drawForest] Called with showTrees=${showTrees}, trees count=${mapData.trees?.length || 0}`);
+  console.log(`[drawForest] cellSize=${cellSize}`);
+  
+  if (!showTrees || !mapData.trees) {
+    console.log(`[drawForest] Early return - showTrees=${showTrees}, has trees=${!!mapData.trees}`);
+    return;
+  }
 
+  console.log(`[drawForest] Drawing ${mapData.trees.length} trees`);
+  console.log(`[drawForest] Sample trees:`, mapData.trees.slice(0, 3));
+
+  // Note: Background is already light brown (clearings) - we only draw trees
   for (const tree of mapData.trees) {
-    const x = tree.x * cellSize;
-    const y = tree.y * cellSize;
-    const size = (tree.size || 1) * cellSize;
-
-    // Tree colors based on size
-    const colors = ['#2d5016', '#3d6e1f', '#4d8f2a'];
-    const colorIndex = Math.min(tree.size || 1, colors.length) - 1;
-
-    ctx.fillStyle = colors[colorIndex];
+    // Calculate center position for circular rendering
+    const centerX = tree.x * cellSize;
+    const centerY = tree.y * cellSize;
     
-    // Draw tree with slight organic variation
-    ctx.fillRect(x, y, size, size);
+    // Tree radius from stored size (already calculated in generator)
+    const radius = (tree.size || 1.5) * cellSize;
     
-    // Add highlight
-    ctx.fillStyle = 'rgba(80, 180, 50, 0.3)';
-    ctx.fillRect(x, y, size / 2, size / 2);
+    if (mapData.trees.indexOf(tree) === 0) {
+      console.log(`[drawForest] First tree: pos=(${centerX}, ${centerY}), radius=${radius}`);
+    }
+
+    // Base tree color (darker green)
+    ctx.fillStyle = '#2d5016';
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Middle layer (medium green) - slightly smaller
+    ctx.fillStyle = '#3d6e1f';
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius * 0.75, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Highlight layer (lighter green) - top-left for depth
+    ctx.fillStyle = '#4d8f2a';
+    ctx.beginPath();
+    ctx.arc(
+      centerX - radius * 0.25,
+      centerY - radius * 0.25,
+      radius * 0.4,
+      0,
+      Math.PI * 2
+    );
+    ctx.fill();
+
+    // Subtle outline for better visibility against clearings
+    ctx.strokeStyle = 'rgba(20, 40, 10, 0.5)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    ctx.stroke();
   }
 }
 

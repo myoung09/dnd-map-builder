@@ -67,7 +67,8 @@ export const PRESETS: Preset[] = [
       height: 100,
       treeDensity: 0.2,
       minTreeDistance: 5,
-      noiseScale: 0.04
+      noiseScale: 0.04,
+      treeRadius: 1.8
     }
   },
   {
@@ -78,7 +79,8 @@ export const PRESETS: Preset[] = [
       height: 100,
       treeDensity: 0.6,
       minTreeDistance: 2,
-      noiseScale: 0.08
+      noiseScale: 0.08,
+      treeRadius: 1.2
     }
   },
   {
