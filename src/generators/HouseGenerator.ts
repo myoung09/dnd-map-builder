@@ -21,6 +21,7 @@ export class HouseGenerator extends MapGenerator {
     const maxRoomSize = this.getParam('maxRoomSize', 10);
     const roomCount = this.getParam('roomCount', 8);
     const corridorWidth = this.getParam('corridorWidth', 1);
+    const gridSize = this.getParam('gridSize', 4); // Grid alignment spacing
 
     // Validate parameters
     if (minRoomSize > maxRoomSize) {
@@ -29,22 +30,30 @@ export class HouseGenerator extends MapGenerator {
     if (minRoomSize < 3) {
       throw new Error('minRoomSize must be at least 3');
     }
+    if (gridSize < 1) {
+      throw new Error('gridSize must be at least 1');
+    }
 
-    // Create root node with padding for walls
+    // Create root node with padding for walls, aligned to grid
     const padding = 2;
+    const alignedX = this.snapToGrid(padding, gridSize);
+    const alignedY = this.snapToGrid(padding, gridSize);
+    const alignedWidth = this.snapToGrid(this.width - (padding * 2), gridSize);
+    const alignedHeight = this.snapToGrid(this.height - (padding * 2), gridSize);
+    
     const root: BSPNode = {
-      x: padding,
-      y: padding,
-      width: this.width - (padding * 2),
-      height: this.height - (padding * 2)
+      x: alignedX,
+      y: alignedY,
+      width: alignedWidth,
+      height: alignedHeight
     };
 
     // Binary Space Partitioning - recursively split space
-    this.splitNode(root, minRoomSize);
+    this.splitNode(root, minRoomSize, gridSize);
 
     // Create rooms in leaf nodes (BSP guarantees non-overlapping)
     const rooms: Room[] = [];
-    this.createRooms(root, rooms, minRoomSize, maxRoomSize);
+    this.createRooms(root, rooms, minRoomSize, maxRoomSize, gridSize);
 
     // Verify no overlaps (paranoid check - BSP should guarantee this)
     this.validateNoOverlaps(rooms);
@@ -73,9 +82,9 @@ export class HouseGenerator extends MapGenerator {
       this.drawRoom(grid, room);
     }
 
-    // Draw corridors as thin lines with configurable width
+    // Draw corridors as thin lines with configurable width (grid-aligned)
     for (const corridor of corridors) {
-      this.drawCorridor(grid, corridor.start, corridor.end, corridorWidth);
+      this.drawCorridor(grid, corridor.start, corridor.end, corridorWidth, gridSize);
     }
 
     return {
@@ -90,7 +99,15 @@ export class HouseGenerator extends MapGenerator {
   }
 
   /**
+   * Snap a value to the nearest grid point
+   */
+  private snapToGrid(value: number, gridSize: number): number {
+    return Math.round(value / gridSize) * gridSize;
+  }
+
+  /**
    * Draw a room as a filled rectangle on the grid
+   * Rooms are axis-aligned and grid-snapped
    */
   private drawRoom(grid: number[][], room: Room): void {
     for (let y = room.y; y < room.y + room.height; y++) {
@@ -166,9 +183,9 @@ export class HouseGenerator extends MapGenerator {
 
   /**
    * Binary Space Partitioning - recursively split node into two children
-   * Ensures minimum room size constraints are met
+   * Ensures minimum room size constraints and grid alignment
    */
-  private splitNode(node: BSPNode, minSize: number): void {
+  private splitNode(node: BSPNode, minSize: number, gridSize: number): void {
     // Calculate minimum split size (need room for 2 rooms + padding)
     const minSplitWidth = (minSize + 2) * 2;
     const minSplitHeight = (minSize + 2) * 2;
@@ -197,7 +214,7 @@ export class HouseGenerator extends MapGenerator {
       }
     }
 
-    // Perform the split
+    // Perform the split (grid-aligned)
     if (splitHorizontal && node.height >= minSplitHeight) {
       // Horizontal split (top/bottom)
       const minSplitY = node.y + minSize + 2;
@@ -205,7 +222,14 @@ export class HouseGenerator extends MapGenerator {
       
       if (maxSplitY <= minSplitY) return; // Can't split
 
-      const splitPos = this.random.nextInt(minSplitY, maxSplitY);
+      // Random split position, then snap to grid
+      const randomSplitY = this.random.nextInt(minSplitY, maxSplitY);
+      const splitPos = this.snapToGrid(randomSplitY, gridSize);
+      
+      // Ensure split position is valid after snapping
+      if (splitPos <= node.y + minSize || splitPos >= node.y + node.height - minSize) {
+        return; // Invalid split after grid alignment
+      }
 
       node.left = {
         x: node.x,
@@ -227,7 +251,14 @@ export class HouseGenerator extends MapGenerator {
       
       if (maxSplitX <= minSplitX) return; // Can't split
 
-      const splitPos = this.random.nextInt(minSplitX, maxSplitX);
+      // Random split position, then snap to grid
+      const randomSplitX = this.random.nextInt(minSplitX, maxSplitX);
+      const splitPos = this.snapToGrid(randomSplitX, gridSize);
+      
+      // Ensure split position is valid after snapping
+      if (splitPos <= node.x + minSize || splitPos >= node.x + node.width - minSize) {
+        return; // Invalid split after grid alignment
+      }
 
       node.left = {
         x: node.x,
@@ -247,19 +278,20 @@ export class HouseGenerator extends MapGenerator {
     }
 
     // Recursively split children
-    if (node.left) this.splitNode(node.left, minSize);
-    if (node.right) this.splitNode(node.right, minSize);
+    if (node.left) this.splitNode(node.left, minSize, gridSize);
+    if (node.right) this.splitNode(node.right, minSize, gridSize);
   }
 
   /**
    * Create rooms in leaf nodes of BSP tree
    * Rooms are guaranteed not to overlap due to BSP structure
+   * All rooms are grid-aligned for clean rectangular layout
    */
-  private createRooms(node: BSPNode, rooms: Room[], minSize: number, maxSize: number): void {
+  private createRooms(node: BSPNode, rooms: Room[], minSize: number, maxSize: number, gridSize: number): void {
     if (node.left || node.right) {
       // Internal node - recurse to children
-      if (node.left) this.createRooms(node.left, rooms, minSize, maxSize);
-      if (node.right) this.createRooms(node.right, rooms, minSize, maxSize);
+      if (node.left) this.createRooms(node.left, rooms, minSize, maxSize, gridSize);
+      if (node.right) this.createRooms(node.right, rooms, minSize, maxSize, gridSize);
     } else {
       // Leaf node - create a room that fits within this partition
       const padding = 1; // Space between room and partition edge
@@ -274,28 +306,66 @@ export class HouseGenerator extends MapGenerator {
       }
 
       // Determine room dimensions (respecting min/max constraints)
-      const roomWidth = this.random.nextInt(
+      // Snap dimensions to grid for clean alignment
+      const randomWidth = this.random.nextInt(
         Math.max(minSize, Math.min(minSize, maxWidth)),
         Math.min(maxSize, maxWidth)
       );
-      const roomHeight = this.random.nextInt(
+      const randomHeight = this.random.nextInt(
         Math.max(minSize, Math.min(minSize, maxHeight)),
         Math.min(maxSize, maxHeight)
       );
-
-      // Random position within partition (with padding)
-      const maxOffsetX = maxWidth - roomWidth;
-      const maxOffsetY = maxHeight - roomHeight;
       
-      const roomX = node.x + padding + (maxOffsetX > 0 ? this.random.nextInt(0, maxOffsetX) : 0);
-      const roomY = node.y + padding + (maxOffsetY > 0 ? this.random.nextInt(0, maxOffsetY) : 0);
+      const roomWidth = this.snapToGrid(randomWidth, gridSize);
+      const roomHeight = this.snapToGrid(randomHeight, gridSize);
 
-      // Create typed Room object
+      // Ensure snapped dimensions still fit within partition
+      const finalWidth = Math.min(roomWidth, maxWidth);
+      const finalHeight = Math.min(roomHeight, maxHeight);
+      
+      // Validate minimum size after snapping
+      if (finalWidth < minSize || finalHeight < minSize) {
+        // Fallback to unsnapped if grid alignment causes issues
+        const room: Room = {
+          x: node.x + padding,
+          y: node.y + padding,
+          width: randomWidth,
+          height: randomHeight
+        };
+        node.room = room;
+        rooms.push(room);
+        return;
+      }
+
+      // Calculate position within partition (with padding)
+      const maxOffsetX = maxWidth - finalWidth;
+      const maxOffsetY = maxHeight - finalHeight;
+      
+      const randomX = node.x + padding + (maxOffsetX > 0 ? this.random.nextInt(0, maxOffsetX) : 0);
+      const randomY = node.y + padding + (maxOffsetY > 0 ? this.random.nextInt(0, maxOffsetY) : 0);
+      
+      // Snap position to grid, but ensure it stays within partition bounds
+      let roomX = this.snapToGrid(randomX, gridSize);
+      let roomY = this.snapToGrid(randomY, gridSize);
+      
+      // Clamp to ensure room stays within partition (critical for non-overlap guarantee)
+      roomX = Math.max(node.x + padding, Math.min(roomX, node.x + padding + maxOffsetX));
+      roomY = Math.max(node.y + padding, Math.min(roomY, node.y + padding + maxOffsetY));
+      
+      // Final bounds check - ensure room doesn't exceed partition
+      if (roomX + finalWidth > node.x + node.width - padding || 
+          roomY + finalHeight > node.y + node.height - padding) {
+        // Safety fallback - place at top-left of partition
+        roomX = node.x + padding;
+        roomY = node.y + padding;
+      }
+
+      // Create typed Room object (grid-aligned, guaranteed within partition)
       const room: Room = {
         x: roomX,
         y: roomY,
-        width: roomWidth,
-        height: roomHeight
+        width: finalWidth,
+        height: finalHeight
       };
 
       node.room = room;
@@ -306,17 +376,23 @@ export class HouseGenerator extends MapGenerator {
   /**
    * Draw L-shaped corridor connecting two points
    * Uses configurable corridor width parameter
+   * Corridors are grid-aligned and run horizontally/vertically only
    */
   private drawCorridor(
     grid: number[][], 
     start: [number, number], 
     end: [number, number],
-    corridorWidth: number
+    corridorWidth: number,
+    gridSize: number
   ): void {
-    const [x1, y1] = start;
-    const [x2, y2] = end;
+    // Snap corridor endpoints to grid for clean alignment
+    const x1 = this.snapToGrid(start[0], gridSize);
+    const y1 = this.snapToGrid(start[1], gridSize);
+    const x2 = this.snapToGrid(end[0], gridSize);
+    const y2 = this.snapToGrid(end[1], gridSize);
 
     // Choose L-shape direction randomly for variety
+    // Corridors run only horizontally or vertically (axis-aligned)
     if (this.random.next() > 0.5) {
       // Horizontal then vertical (┘ or └ shape)
       this.drawHorizontalLine(grid, x1, x2, y1, corridorWidth);

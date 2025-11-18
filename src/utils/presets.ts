@@ -12,7 +12,8 @@ export const PRESETS: Preset[] = [
       minRoomSize: 4,
       maxRoomSize: 8,
       roomCount: 5,
-      corridorWidth: 1
+      corridorWidth: 1,
+      gridSize: 4
     }
   },
   {
@@ -24,7 +25,8 @@ export const PRESETS: Preset[] = [
       minRoomSize: 6,
       maxRoomSize: 15,
       roomCount: 12,
-      corridorWidth: 2
+      corridorWidth: 2,
+      gridSize: 4
     }
   },
   {
@@ -37,6 +39,7 @@ export const PRESETS: Preset[] = [
       maxRoomSize: 10,
       roomCount: 8,
       corridorWidth: 1,
+      gridSize: 4,
       organicFactor: 0.2,
       connectivityFactor: 0.1
     }
@@ -51,6 +54,7 @@ export const PRESETS: Preset[] = [
       maxRoomSize: 14,
       roomCount: 15,
       corridorWidth: 2,
+      gridSize: 4,
       organicFactor: 0.4,
       connectivityFactor: 0.2
     }

@@ -117,6 +117,19 @@ export const ParameterForm: React.FC<ParameterFormProps> = ({
               />
             </label>
           </div>
+
+          <div className="parameter-group">
+            <label>
+              Grid Size: {parameters.gridSize}
+              <input
+                type="range"
+                min="1"
+                max="8"
+                value={parameters.gridSize || 4}
+                onChange={(e) => handleChange('gridSize', parseInt(e.target.value))}
+              />
+            </label>
+          </div>
         </>
       )}
 

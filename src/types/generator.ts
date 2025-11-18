@@ -45,6 +45,7 @@ export interface GeneratorParameters {
   minRoomSize?: number;
   maxRoomSize?: number;
   roomCount?: number;
+  gridSize?: number; // Grid alignment spacing for rooms and corridors
   
   // Corridor parameters
   corridorWidth?: number;
