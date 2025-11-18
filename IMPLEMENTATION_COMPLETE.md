@@ -9,6 +9,7 @@ This is a fully functional procedural map generator built with React + TypeScrip
 ## 📋 Checklist of Deliverables
 
 ### ✅ 1. Architecture
+
 - [x] React functional components with hooks
 - [x] TypeScript throughout (100% typed)
 - [x] Components: App.tsx, TerrainSelector.tsx, ParameterForm.tsx, MapCanvas.tsx
@@ -17,6 +18,7 @@ This is a fully functional procedural map generator built with React + TypeScrip
 - [x] Shared utilities extracted to utils folder
 
 ### ✅ 2. Types
+
 - [x] Room { x, y, width, height }
 - [x] Corridor { start: [x, y], end: [x, y] }
 - [x] Tree { x, y, size }
@@ -25,6 +27,7 @@ This is a fully functional procedural map generator built with React + TypeScrip
 - [x] All generators return strongly typed MapData
 
 ### ✅ 3. Generators
+
 - [x] Abstract base class MapGenerator<T extends MapData>
 - [x] HouseGenerator (Binary Space Partitioning)
 - [x] ForestGenerator (Poisson Disk Sampling + Perlin Noise)
@@ -34,6 +37,7 @@ This is a fully functional procedural map generator built with React + TypeScrip
 - [x] Connectivity checks ensure reachability
 
 ### ✅ 4. Corridor Utility
+
 - [x] connectRooms(rooms: Room[]): Corridor[]
 - [x] Uses Minimum Spanning Tree (Prim's algorithm)
 - [x] Returns typed Corridor objects
@@ -41,6 +45,7 @@ This is a fully functional procedural map generator built with React + TypeScrip
 - [x] Extra connections for loops (connectivity factor)
 
 ### ✅ 5. Rendering
+
 - [x] MapCanvas.tsx uses HTML5 Canvas
 - [x] Accepts MapData as props
 - [x] Renders rooms, corridors, trees, walls
@@ -51,6 +56,7 @@ This is a fully functional procedural map generator built with React + TypeScrip
 - [x] Noise-based edge roughening
 
 ### ✅ 6. Interface
+
 - [x] TerrainSelector: enum-based dropdown
 - [x] ParameterForm: typed input fields with sliders
 - [x] App.tsx: orchestrates all components
@@ -58,12 +64,14 @@ This is a fully functional procedural map generator built with React + TypeScrip
 - [x] Real-time preview capability
 
 ### ✅ 7. Export
+
 - [x] Export Canvas as PNG
 - [x] Export MapData as JSON (typed structure)
 - [x] Import JSON to restore maps
 - [x] Seed-based regeneration
 
 ### ✅ 8. UX Features
+
 - [x] Random seed control
 - [x] 8 preset profiles (Small House, Dense Forest, etc.)
 - [x] Live preview updates
@@ -72,12 +80,14 @@ This is a fully functional procedural map generator built with React + TypeScrip
 - [x] Cell size adjustment slider
 
 ### ✅ 9. Scalability
+
 - [x] Modular generator design
 - [x] Easy to add new terrain types
 - [x] Comment markers for Web Workers
 - [x] Planned expansion notes in README
 
 ### ✅ 10. Testing
+
 - [x] Unit tests for all generators
 - [x] Tests validate outputs (room count, overlap, connectivity)
 - [x] Tests for utilities (MST, Poisson, Perlin, Random)
@@ -122,22 +132,27 @@ src/
 ## 🎨 Features Implemented
 
 ### Algorithms
+
 1. **Binary Space Partitioning (BSP)**
+
    - Recursive space division
    - Room placement in leaf nodes
    - L-shaped corridor generation
 
 2. **Cellular Automata**
+
    - Random initialization
    - Iterative smoothing
    - Threshold-based wall/floor conversion
 
 3. **Perlin Noise**
+
    - Gradient-based noise generation
    - Octave layering for complexity
    - Deterministic with seed
 
 4. **Poisson Disk Sampling**
+
    - Blue noise distribution
    - Minimum distance enforcement
    - Efficient grid-based algorithm
@@ -148,6 +163,7 @@ src/
    - Extra edges for loops
 
 ### UI/UX
+
 - **Parameter Sliders**: Real-time adjustment for all terrain types
 - **Presets**: 8 pre-configured map styles
 - **Seed Control**: Reproducible generation
@@ -156,6 +172,7 @@ src/
 - **Responsive Design**: Works on various screen sizes
 
 ### Visual Polish
+
 - **Layered Rendering**: Background, terrain, overlay canvases
 - **Organic Edges**: Random variation on room/cave boundaries
 - **Distinct Color Schemes**: Unique palette per terrain type
@@ -167,6 +184,7 @@ src/
 ## 🧪 Test Coverage
 
 ### Generator Tests (19 tests)
+
 - ✅ Valid map generation for all terrain types
 - ✅ Room count constraints
 - ✅ No room overlaps
@@ -176,6 +194,7 @@ src/
 - ✅ Seeded reproducibility
 
 ### Utility Tests (10 tests)
+
 - ✅ MST construction
 - ✅ Room connectivity
 - ✅ Overlap detection
@@ -184,6 +203,7 @@ src/
 - ✅ Poisson disk spacing
 
 ### App Tests (2 tests)
+
 - ✅ Component rendering
 - ✅ UI element presence
 
@@ -195,7 +215,7 @@ src/
 
 - **Build Size**: 53.6 KB (gzipped)
 - **Compilation**: Clean build, no errors
-- **Generation Speed**: 
+- **Generation Speed**:
   - Small maps (60×60): <50ms
   - Large maps (200×200): <500ms
 - **Rendering**: Smooth with layered canvas approach
@@ -205,7 +225,9 @@ src/
 ## 📚 Documentation
 
 ### Files Created
+
 1. **MAP_GENERATOR_README.md**: Complete user guide
+
    - Features overview
    - Architecture explanation
    - Usage instructions
@@ -223,6 +245,7 @@ src/
 ## 🎯 Beyond Requirements
 
 Additional features implemented:
+
 - **Extra Connectivity**: Configurable loop generation in dungeons
 - **Organic Factor**: Adjustable roughness for natural appearance
 - **Tree Size Variation**: Noise-based size scaling
