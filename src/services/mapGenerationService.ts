@@ -45,6 +45,8 @@ export interface MapGenerationOptions {
   maxRoomSize: number;
   organicFactor: number; // 0.0 = geometric, 1.0 = very organic
   objectDensity: number; // 0.0 = sparse, 1.0 = dense
+  caveResolution?: number; // Sub-grid resolution for caves (1-10, default from config)
+  caveDisplayScale?: number; // Display zoom multiplier for caves (1.0-5.0, default from config)
 }
 
 interface TerrainObjectSet {
@@ -197,6 +199,7 @@ export class MapGenerationService {
     let gridCellSize = 32; // Default
     let mapWidth = options.width; // Default to user input
     let mapHeight = options.height; // Default to user input
+    let displayScale = 1.0; // Default display scale
     
     if (options.terrainType === MapTerrainType.HOUSE && options.subtype && options.story) {
       const houseConfig = getHouseConfig(options.subtype as HouseSubtype);
@@ -227,6 +230,8 @@ export class MapGenerationService {
         if (caveConfig.gridCellSize) {
           gridCellSize = caveConfig.gridCellSize;
         }
+        // Get display scale from user options, config, or default
+        displayScale = options.caveDisplayScale || caveConfig.drunkardsWalk?.displayScale || 1.0;
       }
     }
 
@@ -248,7 +253,8 @@ export class MapGenerationService {
         showGrid: true,
         gridColor: { r: 200, g: 200, b: 200, a: 0.3 },
         snapToGrid: true,
-        gridType: 'square'
+        gridType: 'square',
+        displayScale: displayScale
       },
       layers: [backgroundLayer, terrainLayer, objectsLayer, gridLayer],
       backgroundColor: colorTheme.backgroundColor

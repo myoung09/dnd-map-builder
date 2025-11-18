@@ -107,6 +107,7 @@ export interface GridConfig {
   gridColor: Color;
   snapToGrid: boolean;
   gridType: 'square' | 'hexagonal';
+  displayScale?: number; // Display zoom multiplier for fine-grained maps (default: 1.0)
 }
 
 // Map metadata

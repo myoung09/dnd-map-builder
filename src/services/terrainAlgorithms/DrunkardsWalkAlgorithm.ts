@@ -47,7 +47,7 @@ export class DrunkardsWalkAlgorithm {
     corridors: Position[][];
     caveMap: boolean[][];
   } {
-    const { width, height, terrainType, subtype } = options;
+    const { width, height, terrainType, subtype, caveResolution } = options;
     
     // Get cave configuration for this subtype
     const caveConfig = terrainType === MapTerrainType.CAVE && subtype 
@@ -57,11 +57,14 @@ export class DrunkardsWalkAlgorithm {
     // Extract Drunkard's Walk parameters from config or use defaults
     const dwParams = caveConfig?.drunkardsWalk || {};
     const coveragePercent = dwParams.coveragePercent || 15;
-    const cavemapResolution = dwParams.resolution || 3;
+    // Use user-specified resolution if provided, otherwise use config, otherwise default to 3
+    const cavemapResolution = caveResolution || dwParams.resolution || 3;
     const directionChangeChance = dwParams.directionChangeChance || 0.15;
     const widerAreaChance = dwParams.widerAreaChance || 0.02;
     const minStepsBeforeChange = dwParams.minStepsBeforeChange || 3;
     const maxStepsBeforeChange = dwParams.maxStepsBeforeChange || 8;
+    // Store displayScale for later use in map config (not used in algorithm)
+    // const displayScale = caveDisplayScale || dwParams.displayScale || 1.0;
     
     // Calculate cave map dimensions at higher resolution
     const caveWidth = width * cavemapResolution;

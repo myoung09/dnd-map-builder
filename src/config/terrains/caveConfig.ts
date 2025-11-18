@@ -31,7 +31,8 @@ export const NATURAL_CAVERN_CONFIG: SubtypeConfig = {
     directionChangeChance: 0.8, // 80% chance to change direction
     widerAreaChance: 0.2, // 20% chance for wider areas
     minStepsBeforeChange: 8,
-    maxStepsBeforeChange: 15
+    maxStepsBeforeChange: 15,
+    displayScale: 1.0 // 1.0 = no scaling (can increase for finer detail, e.g., 2.0 doubles display size)
   }
 };
 
@@ -58,7 +59,8 @@ export const CRYSTAL_CAVE_CONFIG: SubtypeConfig = {
     directionChangeChance: 0.07, // Straighter passages
     widerAreaChance: 0.04, // More chamber-like areas
     minStepsBeforeChange: 4,
-    maxStepsBeforeChange: 10
+    maxStepsBeforeChange: 10,
+    displayScale: 1.0
   }
 };
 
@@ -85,7 +87,8 @@ export const LAVA_TUBES_CONFIG: SubtypeConfig = {
     directionChangeChance: 0.10, // Long, straight tubes
     widerAreaChance: 0.01, // Rare wider areas
     minStepsBeforeChange: 1,
-    maxStepsBeforeChange: 12
+    maxStepsBeforeChange: 12,
+    displayScale: 1.0
   }
 };
 
@@ -112,7 +115,8 @@ export const UNDERGROUND_LAKE_CONFIG: SubtypeConfig = {
     directionChangeChance: 0.80, // More irregular shoreline
     widerAreaChance: 0.20, // Frequent wide areas (lake chambers)
     minStepsBeforeChange: 1,
-    maxStepsBeforeChange: 2
+    maxStepsBeforeChange: 2,
+    displayScale: 1.0
   }
 };
 
@@ -139,7 +143,8 @@ export const MINE_CONFIG: SubtypeConfig = {
     directionChangeChance: 0.08, // Very straight passages (man-made)
     widerAreaChance: 0.06, // Occasional work areas
     minStepsBeforeChange: 6,
-    maxStepsBeforeChange: 15
+    maxStepsBeforeChange: 15,
+    displayScale: 1.0
   }
 };
 

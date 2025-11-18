@@ -116,6 +116,8 @@ export const AIGenerationDialog: React.FC<AIGenerationDialogProps> = ({
   const [houseStory, setHouseStory] = useState<HouseStory>(HouseStory.STORY_1);
   const [caveSubtype, setCaveSubtype] = useState<CaveSubtype>(CaveSubtype.NATURAL_CAVERN);
   const [numberOfRooms, setNumberOfRooms] = useState<number>(5);
+  const [caveResolution, setCaveResolution] = useState<number>(3); // Sub-grid resolution for cave detail
+  const [caveDisplayScale, setCaveDisplayScale] = useState<number>(1.0); // Display zoom multiplier
   const [options, setOptions] = useState<AIGenerationOptions>({
     mapSize: { width: 30, height: 30 },
     style: 'custom',
@@ -265,7 +267,10 @@ export const AIGenerationDialog: React.FC<AIGenerationDialogProps> = ({
         minRoomSize: 3,
         maxRoomSize: options.complexity === 'simple' ? 6 : options.complexity === 'moderate' ? 8 : 12,
         organicFactor: mapType === MapTerrainType.CAVE || mapType === MapTerrainType.FOREST ? 0.7 : 0.3,
-        objectDensity: options.includeObjects ? 0.6 : 0.2
+        objectDensity: options.includeObjects ? 0.6 : 0.2,
+        // Pass cave-specific parameters if generating a cave
+        caveResolution: mapType === MapTerrainType.CAVE ? caveResolution : undefined,
+        caveDisplayScale: mapType === MapTerrainType.CAVE ? caveDisplayScale : undefined
       };
 
       const generatedMap = mapGenerationService.generateLayeredMap(mapOptions);
@@ -493,10 +498,20 @@ export const AIGenerationDialog: React.FC<AIGenerationDialogProps> = ({
                     onChange={(e) => {
                       const newSubtype = e.target.value as CaveSubtype;
                       setCaveSubtype(newSubtype);
-                      // Update room count to config default
+                      // Update room count and cave parameters to config defaults
                       const config = getCaveConfig(newSubtype);
-                      if (config && config.defaultRoomCount) {
-                        setNumberOfRooms(config.defaultRoomCount);
+                      if (config) {
+                        if (config.defaultRoomCount) {
+                          setNumberOfRooms(config.defaultRoomCount);
+                        }
+                        if (config.drunkardsWalk) {
+                          if (config.drunkardsWalk.resolution) {
+                            setCaveResolution(config.drunkardsWalk.resolution);
+                          }
+                          if (config.drunkardsWalk.displayScale) {
+                            setCaveDisplayScale(config.drunkardsWalk.displayScale);
+                          }
+                        }
                       }
                       setGeneration(prev => ({ ...prev, error: null }));
                     }}
@@ -529,6 +544,51 @@ export const AIGenerationDialog: React.FC<AIGenerationDialogProps> = ({
                   ))}
                 </Select>
               </FormControl>
+
+              {/* Cave Detail Settings */}
+              <Box sx={{ mt: 3 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Cave Detail (Resolution): {caveResolution}x
+                </Typography>
+                <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+                  Higher values create finer, more organic cave shapes
+                </Typography>
+                <Slider
+                  value={caveResolution}
+                  onChange={(_, value) => setCaveResolution(value as number)}
+                  min={1}
+                  max={10}
+                  step={1}
+                  marks={[
+                    { value: 1, label: '1x' },
+                    { value: 5, label: '5x' },
+                    { value: 10, label: '10x' }
+                  ]}
+                  disabled={generation.isGenerating}
+                />
+              </Box>
+
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Display Zoom: {caveDisplayScale}x
+                </Typography>
+                <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+                  Blow up the map for easier viewing (grid overlays at standard size)
+                </Typography>
+                <Slider
+                  value={caveDisplayScale}
+                  onChange={(_, value) => setCaveDisplayScale(value as number)}
+                  min={1.0}
+                  max={5.0}
+                  step={0.5}
+                  marks={[
+                    { value: 1.0, label: '1x' },
+                    { value: 2.5, label: '2.5x' },
+                    { value: 5.0, label: '5x' }
+                  ]}
+                  disabled={generation.isGenerating}
+                />
+              </Box>
             </Box>
           )}
 

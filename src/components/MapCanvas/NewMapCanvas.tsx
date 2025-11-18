@@ -31,6 +31,10 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
 
+  // Calculate effective grid size with display scale
+  const displayScale = map.gridConfig?.displayScale || 1.0;
+  const effectiveGridSize = gridSize * displayScale;
+
   // Handle dynamic canvas resizing
   useEffect(() => {
     const updateSize = () => {
@@ -98,8 +102,8 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
       <Rect
         x={0}
         y={0}
-        width={map.dimensions.width * gridSize}
-        height={map.dimensions.height * gridSize}
+        width={map.dimensions.width * effectiveGridSize}
+        height={map.dimensions.height * effectiveGridSize}
         fill={map.backgroundColor ? `rgb(${map.backgroundColor.r}, ${map.backgroundColor.g}, ${map.backgroundColor.b})` : '#f0f0f0'}
       />
     );
@@ -170,10 +174,10 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
       if (!layer.isVisible || !layer.objects) return;
 
       layer.objects.forEach(obj => {
-        const x = obj.position.x * gridSize;
-        const y = obj.position.y * gridSize;
-        const width = obj.size.width * gridSize;
-        const height = obj.size.height * gridSize;
+        const x = obj.position.x * effectiveGridSize;
+        const y = obj.position.y * effectiveGridSize;
+        const width = obj.size.width * effectiveGridSize;
+        const height = obj.size.height * effectiveGridSize;
         const isSelected = selectedObjects.includes(obj.id);
 
         // Handle grid objects specially
@@ -191,8 +195,8 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
           // For each terrain cell, draw its borders
           terrainCells.forEach(cellKey => {
             const [cellX, cellY] = cellKey.split(',').map(Number);
-            const cellScreenX = cellX * gridSize;
-            const cellScreenY = cellY * gridSize;
+            const cellScreenX = cellX * effectiveGridSize;
+            const cellScreenY = cellY * effectiveGridSize;
             
             // Top border
             gridLines.push(
@@ -200,7 +204,7 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
                 key={`grid-t-${cellX}-${cellY}`}
                 x={cellScreenX}
                 y={cellScreenY}
-                width={gridSize}
+                width={effectiveGridSize}
                 height={lineWidth}
                 fill={`rgba(${lineColor.r}, ${lineColor.g}, ${lineColor.b}, ${opacity})`}
                 listening={false}
@@ -214,7 +218,7 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
                 x={cellScreenX}
                 y={cellScreenY}
                 width={lineWidth}
-                height={gridSize}
+                height={effectiveGridSize}
                 fill={`rgba(${lineColor.r}, ${lineColor.g}, ${lineColor.b}, ${opacity})`}
                 listening={false}
               />
@@ -224,10 +228,10 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
             gridLines.push(
               <Rect
                 key={`grid-r-${cellX}-${cellY}`}
-                x={cellScreenX + gridSize - lineWidth}
+                x={cellScreenX + effectiveGridSize - lineWidth}
                 y={cellScreenY}
                 width={lineWidth}
-                height={gridSize}
+                height={effectiveGridSize}
                 fill={`rgba(${lineColor.r}, ${lineColor.g}, ${lineColor.b}, ${opacity})`}
                 listening={false}
               />
@@ -238,8 +242,8 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
               <Rect
                 key={`grid-b-${cellX}-${cellY}`}
                 x={cellScreenX}
-                y={cellScreenY + gridSize - lineWidth}
-                width={gridSize}
+                y={cellScreenY + effectiveGridSize - lineWidth}
+                width={effectiveGridSize}
                 height={lineWidth}
                 fill={`rgba(${lineColor.r}, ${lineColor.g}, ${lineColor.b}, ${opacity})`}
                 listening={false}
@@ -308,12 +312,12 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
                 x={x + width / 2}
                 y={y + height / 2}
                 text={obj.properties.emoji}
-                fontSize={Math.min(gridSize * 0.8, 24)}
+                fontSize={Math.min(effectiveGridSize * 0.8, 24)}
                 fontFamily="Arial"
                 align="center"
                 verticalAlign="middle"
-                offsetX={Math.min(gridSize * 0.4, 12)}
-                offsetY={Math.min(gridSize * 0.4, 12)}
+                offsetX={Math.min(effectiveGridSize * 0.4, 12)}
+                offsetY={Math.min(effectiveGridSize * 0.4, 12)}
                 objectId={obj.id}
               />
             </Group>
@@ -347,8 +351,8 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
             // Convert path points to flat array for Konva Line
             const linePoints: number[] = [];
             pathPoints.forEach((point: { x: number; y: number; width?: number }) => {
-              linePoints.push(point.x * gridSize);
-              linePoints.push(point.y * gridSize);
+              linePoints.push(point.x * effectiveGridSize);
+              linePoints.push(point.y * effectiveGridSize);
             });
             
             // Render as smooth line with tension
@@ -357,7 +361,7 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
                 <Line
                   points={linePoints}
                   stroke={fillColor}
-                  strokeWidth={defaultPathWidth * gridSize}
+                  strokeWidth={defaultPathWidth * effectiveGridSize}
                   lineCap="round"
                   lineJoin="round"
                   tension={0.3}
@@ -383,17 +387,17 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
             const corridorRects: JSX.Element[] = [];
             
             obj.properties.corridorPoints.forEach((point: { x: number; y: number; width?: number }, idx: number) => {
-              const cellWidth = (point.width || defaultPathWidth) * gridSize;
+              const cellWidth = (point.width || defaultPathWidth) * effectiveGridSize;
               corridorRects.push(
                 <Rect
                   key={`${obj.id}-corridor-${idx}`}
-                  x={point.x * gridSize}
-                  y={point.y * gridSize}
+                  x={point.x * effectiveGridSize}
+                  y={point.y * effectiveGridSize}
                   width={cellWidth}
                   height={cellWidth}
                   fill={fillColor}
                   listening={false}
-                  cornerRadius={gridSize * 0.1} // Slight rounding for organic feel
+                  cornerRadius={effectiveGridSize * 0.1} // Slight rounding for organic feel
                 />
               );
             });
@@ -423,8 +427,8 @@ const NewMapCanvas: React.FC<MapCanvasProps> = ({
             // Convert shape points to absolute coordinates
             const shapePoints: number[] = [];
             obj.properties.shape.points.forEach((point: { x: number; y: number }) => {
-              shapePoints.push(centerX + point.x * gridSize);
-              shapePoints.push(centerY + point.y * gridSize);
+              shapePoints.push(centerX + point.x * effectiveGridSize);
+              shapePoints.push(centerY + point.y * effectiveGridSize);
             });
             
             allObjects.push(

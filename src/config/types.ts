@@ -60,6 +60,7 @@ export interface DrunkardsWalkParams {
   widerAreaChance?: number; // Probability of carving wider areas (default: 0.02)
   minStepsBeforeChange?: number; // Minimum steps before forced direction change (default: 3)
   maxStepsBeforeChange?: number; // Maximum steps before forced direction change (default: 8)
+  displayScale?: number; // Display scale multiplier for viewing fine-grained maps (default: 1.0)
 }
 
 // Subtype configuration (e.g., Cottage, Dense Forest, Natural Cavern)
