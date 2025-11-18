@@ -1,7 +1,9 @@
-// MapCanvas Component with layered rendering
+// MapCanvas Component with layered rendering, organic edge roughening, and export controls
 
-import React, { useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
+import React, { useRef, useEffect, forwardRef, useImperativeHandle, useState } from 'react';
 import { MapData, TerrainType } from '../types/generator';
+import { ExportUtils } from '../utils/export';
+import { PerlinNoise } from '../utils/noise';
 
 interface MapCanvasProps {
   mapData: MapData | null;
@@ -16,6 +18,37 @@ export interface MapCanvasRef {
   exportToPNG: () => string;
 }
 
+// Terrain color palette - distinct colors for each element type
+const TERRAIN_COLORS = {
+  // Rooms/Buildings - warm brown tones
+  room: '#8b7355',
+  roomStroke: '#6a5a45',
+  
+  // Corridors - neutral gray
+  corridor: '#6a6a6a',
+  corridorStroke: '#5a5a5a',
+  
+  // Trees - dark forest green
+  tree: '#2d5016',
+  treeStroke: '#1f3810',
+  
+  // Cave walls - very dark blue-black
+  wall: '#1a1a2a',
+  wallEdge: '#2a2a3a',
+  
+  // Cave floors - medium light gray
+  floor: '#6a6a7a',
+  floorVariation: 'rgba(110, 110, 130, 0.4)',
+  
+  // Background colors by terrain type
+  background: {
+    forest: '#e8f5e9',
+    cave: '#1a1a1a',
+    dungeon: '#2a2a2a',
+    house: '#f5f5dc'
+  }
+};
+
 export const MapCanvas = forwardRef<MapCanvasRef, MapCanvasProps>(({
   mapData,
   cellSize = 4,
@@ -27,6 +60,10 @@ export const MapCanvas = forwardRef<MapCanvasRef, MapCanvasProps>(({
   const backgroundCanvasRef = useRef<HTMLCanvasElement>(null);
   const terrainCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [showExportButtons, setShowExportButtons] = useState(true);
+
+  // Perlin noise instance for edge roughening (seeded for consistency)
+  const noiseRef = useRef<PerlinNoise>(new PerlinNoise(12345));
 
   // Expose export function
   useImperativeHandle(ref, () => ({
@@ -35,6 +72,22 @@ export const MapCanvas = forwardRef<MapCanvasRef, MapCanvasProps>(({
       return terrainCanvasRef.current.toDataURL('image/png');
     }
   }));
+
+  // Handle PNG export
+  const handleExportPNG = () => {
+    if (!mapData || !terrainCanvasRef.current) return;
+    const dataUrl = terrainCanvasRef.current.toDataURL('image/png');
+    const link = document.createElement('a');
+    link.download = `map-${mapData.terrainType}-${mapData.seed || 'unknown'}.png`;
+    link.href = dataUrl;
+    link.click();
+  };
+
+  // Handle JSON export
+  const handleExportJSON = () => {
+    if (!mapData) return;
+    ExportUtils.exportMapToJSON(mapData, `map-${mapData.terrainType}-${mapData.seed || 'unknown'}.json`);
+  };
 
   useEffect(() => {
     if (!mapData) return;
@@ -73,16 +126,16 @@ export const MapCanvas = forwardRef<MapCanvasRef, MapCanvasProps>(({
       drawGrid(overlayCtx, mapData.width, mapData.height, cellSize);
     }
 
-    // Draw terrain based on type
+    // Draw terrain based on type (pass noise instance for edge roughening)
     if (mapData.terrainType === TerrainType.Forest) {
       console.log(`[MapCanvas] Rendering Forest terrain`);
-      drawForest(terrainCtx, mapData, cellSize, showTrees);
+      drawForest(terrainCtx, mapData, cellSize, showTrees, noiseRef.current);
     } else if (mapData.terrainType === TerrainType.Cave) {
       console.log(`[MapCanvas] Rendering Cave terrain`);
-      drawCave(terrainCtx, mapData, cellSize);
+      drawCave(terrainCtx, mapData, cellSize, noiseRef.current);
     } else if (mapData.terrainType === TerrainType.House || mapData.terrainType === TerrainType.Dungeon) {
       console.log(`[MapCanvas] Rendering House/Dungeon terrain`);
-      drawDungeon(terrainCtx, mapData, cellSize, showRooms, showCorridors);
+      drawDungeon(terrainCtx, mapData, cellSize, showRooms, showCorridors, noiseRef.current);
     }
 
   }, [mapData, cellSize, showGrid, showRooms, showCorridors, showTrees]);
@@ -102,6 +155,96 @@ export const MapCanvas = forwardRef<MapCanvasRef, MapCanvasProps>(({
         <canvas ref={terrainCanvasRef} className="canvas-layer" />
         <canvas ref={overlayCanvasRef} className="canvas-layer" />
       </div>
+      
+      {/* Export controls overlay */}
+      {showExportButtons && (
+        <div className="export-controls" style={{
+          position: 'absolute',
+          top: '10px',
+          right: '10px',
+          display: 'flex',
+          gap: '8px',
+          zIndex: 10
+        }}>
+          <button 
+            onClick={handleExportPNG}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#4CAF50',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: 'bold',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#45a049'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#4CAF50'}
+          >
+            📷 Export PNG
+          </button>
+          <button 
+            onClick={handleExportJSON}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#2196F3',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: 'bold',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0b7dda'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#2196F3'}
+          >
+            💾 Export JSON
+          </button>
+          <button 
+            onClick={() => setShowExportButtons(false)}
+            style={{
+              padding: '8px 12px',
+              backgroundColor: '#f44336',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: 'bold',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#da190b'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f44336'}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+      
+      {/* Show export controls button when hidden */}
+      {!showExportButtons && (
+        <button
+          onClick={() => setShowExportButtons(true)}
+          style={{
+            position: 'absolute',
+            top: '10px',
+            right: '10px',
+            padding: '8px 12px',
+            backgroundColor: '#666',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            zIndex: 10,
+            boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+          }}
+        >
+          📤
+        </button>
+      )}
     </div>
   );
 });
@@ -116,15 +259,15 @@ function drawBackground(
   height: number,
   terrainType?: TerrainType
 ) {
-  // Background color based on terrain
+  // Background color based on terrain - use TERRAIN_COLORS
   const colors: Record<string, string> = {
-    [TerrainType.House]: '#2c2c2c',
-    [TerrainType.Forest]: '#d4c5a0', // Light brown/tan for forest floor (clearings)
-    [TerrainType.Cave]: '#1a1a2e',
-    [TerrainType.Dungeon]: '#1a1a1a'
+    [TerrainType.House]: TERRAIN_COLORS.background.house,
+    [TerrainType.Forest]: TERRAIN_COLORS.background.forest,
+    [TerrainType.Cave]: TERRAIN_COLORS.background.cave,
+    [TerrainType.Dungeon]: TERRAIN_COLORS.background.dungeon
   };
 
-  ctx.fillStyle = colors[terrainType || TerrainType.Dungeon] || '#1a1a1a';
+  ctx.fillStyle = colors[terrainType || TerrainType.Dungeon] || TERRAIN_COLORS.background.dungeon;
   ctx.fillRect(0, 0, width, height);
 }
 
@@ -156,7 +299,8 @@ function drawForest(
   ctx: CanvasRenderingContext2D,
   mapData: MapData,
   cellSize: number,
-  showTrees: boolean
+  showTrees: boolean,
+  noise: PerlinNoise
 ) {
   console.log(`[drawForest] Called with showTrees=${showTrees}, trees count=${mapData.trees?.length || 0}`);
   console.log(`[drawForest] cellSize=${cellSize}`);
@@ -169,21 +313,25 @@ function drawForest(
   console.log(`[drawForest] Drawing ${mapData.trees.length} trees`);
   console.log(`[drawForest] Sample trees:`, mapData.trees.slice(0, 3));
 
-  // Note: Background is already light brown (clearings) - we only draw trees
+  // Note: Background is already light green (clearings) - we only draw trees
   for (const tree of mapData.trees) {
     // Calculate center position for circular rendering
     const centerX = tree.x * cellSize;
     const centerY = tree.y * cellSize;
     
     // Tree radius from stored size (already calculated in generator)
-    const radius = (tree.size || 1.5) * cellSize;
+    const baseRadius = (tree.size || 1.5) * cellSize;
+    
+    // Apply noise-based variation for organic tree shapes
+    const noiseValue = noise.octaveNoise(tree.x * 0.1, tree.y * 0.1, 2, 0.5);
+    const radius = baseRadius * (1 + noiseValue * 0.15);
     
     if (mapData.trees.indexOf(tree) === 0) {
       console.log(`[drawForest] First tree: pos=(${centerX}, ${centerY}), radius=${radius}`);
     }
 
-    // Base tree color (darker green)
-    ctx.fillStyle = '#2d5016';
+    // Base tree color (dark forest green from palette)
+    ctx.fillStyle = TERRAIN_COLORS.tree;
     ctx.beginPath();
     ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
     ctx.fill();
@@ -206,8 +354,8 @@ function drawForest(
     );
     ctx.fill();
 
-    // Subtle outline for better visibility against clearings
-    ctx.strokeStyle = 'rgba(20, 40, 10, 0.5)';
+    // Subtle outline from palette
+    ctx.strokeStyle = TERRAIN_COLORS.treeStroke;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
@@ -218,7 +366,8 @@ function drawForest(
 function drawCave(
   ctx: CanvasRenderingContext2D,
   mapData: MapData,
-  cellSize: number
+  cellSize: number,
+  noise: PerlinNoise
 ) {
   if (!mapData.grid) return;
 
@@ -231,26 +380,26 @@ function drawCave(
       const py = y * cellSize;
 
       if (cell === 0) {
-        // Open space - lighter cave floor color with slight variation
-        // Use lighter grays/browns for open areas
-        ctx.fillStyle = '#6a6a7a'; // Medium-light gray-blue for open space
+        // Open space - cave floor from palette
+        ctx.fillStyle = TERRAIN_COLORS.floor;
         ctx.fillRect(px, py, cellSize, cellSize);
         
         // Add texture variation to floor
         if (Math.random() > 0.7) {
-          ctx.fillStyle = 'rgba(110, 110, 130, 0.4)';
+          ctx.fillStyle = TERRAIN_COLORS.floorVariation;
           ctx.fillRect(px, py, cellSize, cellSize);
         }
       } else {
-        // Wall - darker rock wall color
-        // Use very dark colors for walls to create strong contrast
-        ctx.fillStyle = '#1a1a2a'; // Very dark blue-black for walls
+        // Wall - dark rock wall from palette
+        ctx.fillStyle = TERRAIN_COLORS.wall;
         ctx.fillRect(px, py, cellSize, cellSize);
         
         // Add organic edge roughening for walls adjacent to open space
         if (hasFloorNeighbor(mapData.grid, x, y)) {
-          ctx.fillStyle = '#2a2a3a'; // Slightly lighter dark for edge variation
-          const offset = Math.random() * cellSize * 0.3;
+          ctx.fillStyle = TERRAIN_COLORS.wallEdge;
+          // Use noise for organic edge variation
+          const roughness = noise.octaveNoise(x * 0.3, y * 0.3, 2, 0.5);
+          const offset = Math.abs(roughness) * cellSize * 0.4;
           ctx.fillRect(px, py, cellSize - offset, cellSize - offset);
         }
       }
@@ -263,7 +412,8 @@ function drawDungeon(
   mapData: MapData,
   cellSize: number,
   showRooms: boolean,
-  showCorridors: boolean
+  showCorridors: boolean,
+  noise: PerlinNoise
 ) {
   if (!mapData.grid) return;
 
@@ -271,7 +421,7 @@ function drawDungeon(
 
   const isHouse = mapData.terrainType === TerrainType.House;
 
-  // Draw grid-based terrain (rooms and corridors)
+  // Draw grid-based terrain (rooms and corridors) with organic edge roughening
   for (let y = 0; y < mapData.height; y++) {
     for (let x = 0; x < mapData.width; x++) {
       const cell = mapData.grid[y][x];
@@ -291,14 +441,14 @@ function drawDungeon(
           }
         }
 
-        // Draw floor with different colors for rooms vs corridors
+        // Draw floor with different colors for rooms vs corridors using palette
         if (showRooms || showCorridors) {
           if (isInRoom) {
-            // Room floor - lighter, more prominent
-            ctx.fillStyle = isHouse ? '#d4c4a8' : '#7a7a7a';
+            // Room floor - use room color from palette
+            ctx.fillStyle = isHouse ? TERRAIN_COLORS.room : '#7a7a7a';
           } else {
-            // Corridor floor - slightly darker for contrast
-            ctx.fillStyle = isHouse ? '#c4b498' : '#6a6a6a';
+            // Corridor floor - use corridor color from palette
+            ctx.fillStyle = isHouse ? '#c4b498' : TERRAIN_COLORS.corridor;
           }
           ctx.fillRect(px, py, cellSize, cellSize);
           
@@ -311,14 +461,17 @@ function drawDungeon(
           }
         }
       } else {
-        // Wall - darker for strong contrast
-        ctx.fillStyle = isHouse ? '#8b7355' : '#2a2a2a';
+        // Wall - darker for strong contrast with organic roughening
+        ctx.fillStyle = isHouse ? TERRAIN_COLORS.roomStroke : TERRAIN_COLORS.wall;
         ctx.fillRect(px, py, cellSize, cellSize);
         
-        // Add depth to walls adjacent to floors
+        // Add depth and organic variation to walls adjacent to floors
         if (hasFloorNeighbor(mapData.grid, x, y)) {
-          ctx.fillStyle = isHouse ? '#6d5a45' : '#1a1a1a';
-          ctx.fillRect(px + 1, py + 1, cellSize - 2, cellSize - 2);
+          ctx.fillStyle = isHouse ? '#6d5a45' : TERRAIN_COLORS.wallEdge;
+          // Apply noise-based organic edge roughening
+          const roughness = noise.octaveNoise(x * 0.2, y * 0.2, 2, 0.5);
+          const offset = Math.abs(roughness) * cellSize * 0.25;
+          ctx.fillRect(px + offset, py + offset, cellSize - offset * 2, cellSize - offset * 2);
         }
       }
     }
@@ -326,10 +479,15 @@ function drawDungeon(
 
   // Draw room rectangles with outlines for clarity
   if (showRooms && mapData.rooms) {
-    ctx.strokeStyle = isHouse ? 'rgba(139, 115, 85, 0.6)' : 'rgba(255, 255, 255, 0.2)';
+    ctx.strokeStyle = isHouse ? TERRAIN_COLORS.roomStroke : 'rgba(255, 255, 255, 0.2)';
     ctx.lineWidth = 2;
     
     for (const room of mapData.rooms) {
+      // Apply subtle noise-based variation to room outlines for organic feel
+      const noiseOffset = noise.octaveNoise(room.x * 0.1, room.y * 0.1, 1, 0.5);
+      const lineVariation = 1 + noiseOffset * 0.2;
+      ctx.lineWidth = 2 * lineVariation;
+      
       ctx.strokeRect(
         room.x * cellSize,
         room.y * cellSize,
@@ -341,7 +499,7 @@ function drawDungeon(
 
   // Draw corridor paths for visualization
   if (showCorridors && mapData.corridors) {
-    ctx.strokeStyle = isHouse ? 'rgba(160, 140, 120, 0.4)' : 'rgba(100, 150, 200, 0.3)';
+    ctx.strokeStyle = isHouse ? 'rgba(160, 140, 120, 0.4)' : TERRAIN_COLORS.corridorStroke;
     ctx.lineWidth = Math.max(1, cellSize / 3);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
