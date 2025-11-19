@@ -1,6 +1,6 @@
 /**
  * TopMenuBar Component
- * Application menu with object placement controls
+ * Application menu with object placement controls and drawer toggle
  */
 
 import React from 'react';
@@ -15,6 +15,7 @@ import {
   Tooltip
 } from '@mui/material';
 import {
+  Menu as MenuIcon,
   AddCircleOutline as AddObjectIcon,
   RemoveCircleOutline as RemoveObjectIcon,
   GridOn as GridOnIcon,
@@ -22,11 +23,13 @@ import {
   Layers as LayersIcon,
   LayersClear as LayersClearIcon,
   FileDownload as ExportIcon,
-  Palette as PaletteIcon
+  Palette as PaletteIcon,
+  Map as MapIcon,
 } from '@mui/icons-material';
 import { PlacementMode } from '../types/objects';
 
 interface TopMenuBarProps {
+  onOpenDrawer: () => void;
   placementMode: PlacementMode;
   onPlacementModeChange: (mode: PlacementMode) => void;
   showGrid: boolean;
@@ -40,6 +43,7 @@ interface TopMenuBarProps {
 }
 
 export const TopMenuBar: React.FC<TopMenuBarProps> = ({
+  onOpenDrawer,
   placementMode,
   onPlacementModeChange,
   showGrid,
@@ -52,29 +56,39 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
   disabled = false
 }) => {
   return (
-    <AppBar position="static" color="default" elevation={1}>
-      <Toolbar variant="dense" sx={{ gap: 1 }}>
+    <AppBar position="static" elevation={2}>
+      <Toolbar sx={{ gap: 1 }}>
+        {/* Hamburger Menu */}
+        <Tooltip title="Open Controls">
+          <IconButton
+            color="inherit"
+            onClick={onOpenDrawer}
+            edge="start"
+            sx={{ mr: 1 }}
+          >
+            <MenuIcon />
+          </IconButton>
+        </Tooltip>
+        
         {/* App Title */}
-        <Typography variant="h6" component="div" sx={{ flexGrow: 0, mr: 2 }}>
+        <MapIcon sx={{ mr: 1 }} />
+        <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
           DnD Map Builder
         </Typography>
         
-        <Divider orientation="vertical" flexItem />
-        
         {/* Object Placement Controls */}
-        <Box sx={{ display: 'flex', gap: 0.5, ml: 1 }}>
+        <Box sx={{ display: 'flex', gap: 1 }}>
           <Tooltip title="Show/Hide Object Palette">
             <IconButton
-              color={showPalette ? 'primary' : 'default'}
+              color={showPalette ? 'primary' : 'inherit'}
               onClick={onTogglePalette}
               disabled={disabled}
-              size="small"
             >
               <PaletteIcon />
             </IconButton>
           </Tooltip>
           
-          <Tooltip title="Place Object (Click to place selected object)">
+          <Tooltip title="Place Object">
             <Button
               variant={placementMode === PlacementMode.Place ? 'contained' : 'outlined'}
               startIcon={<AddObjectIcon />}
@@ -83,12 +97,13 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
               )}
               disabled={disabled}
               size="small"
+              color="inherit"
             >
               Place
             </Button>
           </Tooltip>
           
-          <Tooltip title="Delete Object (Click objects to remove)">
+          <Tooltip title="Delete Object">
             <Button
               variant={placementMode === PlacementMode.Delete ? 'contained' : 'outlined'}
               startIcon={<RemoveObjectIcon />}
@@ -97,23 +112,22 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
               )}
               disabled={disabled}
               size="small"
-              color={placementMode === PlacementMode.Delete ? 'error' : 'primary'}
+              color={placementMode === PlacementMode.Delete ? 'error' : 'inherit'}
             >
               Delete
             </Button>
           </Tooltip>
         </Box>
         
-        <Divider orientation="vertical" flexItem />
+        <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
         
         {/* View Controls */}
-        <Box sx={{ display: 'flex', gap: 0.5, ml: 1 }}>
+        <Box sx={{ display: 'flex', gap: 0.5 }}>
           <Tooltip title={showGrid ? 'Hide Grid' : 'Show Grid'}>
             <IconButton
-              color={showGrid ? 'primary' : 'default'}
+              color={showGrid ? 'primary' : 'inherit'}
               onClick={onToggleGrid}
               disabled={disabled}
-              size="small"
             >
               {showGrid ? <GridOnIcon /> : <GridOffIcon />}
             </IconButton>
@@ -121,43 +135,30 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
           
           <Tooltip title={showObjectLayer ? 'Hide Objects' : 'Show Objects'}>
             <IconButton
-              color={showObjectLayer ? 'primary' : 'default'}
+              color={showObjectLayer ? 'primary' : 'inherit'}
               onClick={onToggleObjectLayer}
               disabled={disabled}
-              size="small"
             >
               {showObjectLayer ? <LayersIcon /> : <LayersClearIcon />}
             </IconButton>
           </Tooltip>
         </Box>
         
-        <Divider orientation="vertical" flexItem />
+        <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
         
         {/* Export */}
-        <Box sx={{ ml: 1 }}>
-          <Tooltip title="Export Map">
-            <Button
-              variant="outlined"
-              startIcon={<ExportIcon />}
-              onClick={onExport}
-              disabled={disabled}
-              size="small"
-            >
-              Export
-            </Button>
-          </Tooltip>
-        </Box>
-        
-        {/* Spacer */}
-        <Box sx={{ flexGrow: 1 }} />
-        
-        {/* Status */}
-        <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
-          Mode: {placementMode === PlacementMode.None ? 'View' : 
-                 placementMode === PlacementMode.Place ? 'Place Object' :
-                 placementMode === PlacementMode.Delete ? 'Delete Object' :
-                 placementMode === PlacementMode.Move ? 'Move Object' : 'Select'}
-        </Typography>
+        <Tooltip title="Export Map">
+          <Button
+            variant="outlined"
+            startIcon={<ExportIcon />}
+            onClick={onExport}
+            disabled={disabled}
+            size="small"
+            color="inherit"
+          >
+            Export
+          </Button>
+        </Tooltip>
       </Toolbar>
     </AppBar>
   );
