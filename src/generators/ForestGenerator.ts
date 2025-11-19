@@ -2,19 +2,11 @@
 // Creates natural-looking tree clumps with clear walkable areas and entrance/exit paths
 
 import { MapGenerator } from './MapGenerator';
-import { MapData, Tree, PathPoint, TerrainType } from '../types/generator';
+import { MapData, Tree, TreeCluster, PathPoint, TerrainType } from '../types/generator';
 import { PerlinNoise } from '../utils/noise';
 import { SeededRandom } from '../utils/random';
 
-interface Cluster {
-  id: number;
-  centerX: number;
-  centerY: number;
-  radius: number;
-  treeCount: number;
-}
-
-export class ForestGenerator extends MapGenerator {
+export class ForestGenerator extends MapGenerator<MapData, number> {
   private noise: PerlinNoise;
   private rng: SeededRandom; // Renamed from 'random' to avoid conflict
   
@@ -57,7 +49,8 @@ export class ForestGenerator extends MapGenerator {
     console.log(`[ForestGenerator] Generated main path with ${mainPath.length} points`);
 
     // Step 3.5: Generate branching paths from the main path
-    const branches = this.generateBranchingPaths(mainPath, clusters, clearingSize);
+    const branchPathDensity = this.getParam('branchPathDensity', 0.5); // 0 = none, 1 = dense
+    const branches = this.generateBranchingPaths(mainPath, clusters, clearingSize, branchPathDensity);
 
     // Combine all paths for tree placement (main + branches)
     const allPaths = [...mainPath];
@@ -103,8 +96,8 @@ export class ForestGenerator extends MapGenerator {
     numClusters: number,
     clusterRadius: number,
     clearingSize: number
-  ): Cluster[] {
-    const clusters: Cluster[] = [];
+  ): TreeCluster[] {
+    const clusters: TreeCluster[] = [];
     const minDistance = clusterRadius * 2 + clearingSize;
     const maxAttempts = numClusters * 20; // More attempts for better coverage
     
@@ -156,7 +149,8 @@ export class ForestGenerator extends MapGenerator {
           centerX: x,
           centerY: y,
           radius: clusterRadius,
-          treeCount: 0
+          treeCount: 0,
+          trees: []
         });
         attemptsSinceLastCluster = 0;
       }
@@ -189,7 +183,7 @@ export class ForestGenerator extends MapGenerator {
   private generatePath(
     entrance: PathPoint,
     exit: PathPoint,
-    clusters: Cluster[],
+    clusters: TreeCluster[],
     clearingSize: number
   ): PathPoint[] {
     // Simple path generation using waypoints and interpolation
@@ -280,16 +274,28 @@ export class ForestGenerator extends MapGenerator {
   /**
    * Generate branching paths from the main path
    * Creates side trails that wander into the forest
+   * @param branchPathDensity - Controls number of branches: 0 = none, 0.5 = moderate, 1.0 = very dense
    */
   private generateBranchingPaths(
     mainPath: PathPoint[],
-    clusters: Cluster[],
-    clearingSize: number
+    clusters: TreeCluster[],
+    clearingSize: number,
+    branchPathDensity: number = 0.5
   ): PathPoint[][] {
     const branches: PathPoint[][] = [];
-    const numBranches = 3 + this.rng.nextInt(0, 4); // 3-7 branches
     
-    console.log(`[ForestGenerator] Creating ${numBranches} branch paths...`);
+    // Calculate number of branches based on density parameter
+    // Base range: 1-10 branches, scaled by density
+    const minBranches = Math.max(0, Math.floor(branchPathDensity * 3));
+    const maxBranches = Math.max(minBranches, Math.floor(branchPathDensity * 10));
+    const numBranches = minBranches + this.rng.nextInt(0, maxBranches - minBranches);
+    
+    if (numBranches === 0) {
+      console.log(`[ForestGenerator] Branch path density ${branchPathDensity} - creating no branch paths`);
+      return branches;
+    }
+    
+    console.log(`[ForestGenerator] Branch path density ${branchPathDensity.toFixed(2)} - creating ${numBranches} branch paths...`);
     
     for (let i = 0; i < numBranches; i++) {
       // Pick a random point along the main path to branch from (avoid first/last 20%)
@@ -308,8 +314,10 @@ export class ForestGenerator extends MapGenerator {
         directionAngle = this.rng.nextFloat(0, Math.PI * 2);
       }
       
-      // Create meandering branch path
-      const branchLength = 15 + this.rng.nextInt(0, 25); // 15-40 units
+      // Create meandering branch path with length affected by density
+      const baseBranchLength = 15 + this.rng.nextInt(0, 25); // 15-40 units base
+      const branchLength = Math.floor(baseBranchLength * (0.5 + branchPathDensity * 0.75)); // Scale by density
+      
       const branch = this.createBranchPath(
         branchStart,
         directionAngle,
@@ -338,7 +346,7 @@ export class ForestGenerator extends MapGenerator {
     start: PathPoint,
     initialAngle: number,
     length: number,
-    clusters: Cluster[],
+    clusters: TreeCluster[],
     clearingSize: number
   ): PathPoint[] {
     const branch: PathPoint[] = [];
@@ -385,7 +393,7 @@ export class ForestGenerator extends MapGenerator {
    * Populate each cluster with trees using Poisson disk sampling
    */
   private populateClusters(
-    clusters: Cluster[],
+    clusters: TreeCluster[],
     clusterSize: number,
     clusterRadius: number,
     treeRadius: number,

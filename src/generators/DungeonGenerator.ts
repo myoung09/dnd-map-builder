@@ -43,7 +43,7 @@ interface BSPNode {
   room?: Room;
 }
 
-export class DungeonGenerator extends MapGenerator {
+export class DungeonGenerator extends MapGenerator<MapData, number> {
   generate(): MapData {
     console.log('[DungeonGenerator] Starting dungeon generation');
     
@@ -263,8 +263,9 @@ export class DungeonGenerator extends MapGenerator {
    * Draw corridor using Random Walk algorithm
    * Carves organic path from start to end with configurable straightness
    * Ensures path is fully connected by carving as it walks
+   * Supports diagonal movement when walkSteps > 8
    * 
-   * @param walkSteps - Bias towards target (1-10). Higher = straighter path
+   * @param walkSteps - Bias towards target (1-10). Higher = straighter path. >8 enables diagonals
    */
   private drawRandomWalkCorridor(
     grid: number[][],
@@ -276,12 +277,15 @@ export class DungeonGenerator extends MapGenerator {
     let [x, y] = start;
     const [endX, endY] = end;
     const corridorWidth = this.getParam('corridorWidth', 1);
+    const enableDiagonals = walkSteps > 8; // Enable diagonal connections for high walkSteps
     
     // walkSteps controls straightness: higher = more biased towards target
     const targetBias = Math.min(0.95, 0.5 + (walkSteps / 20)); // 0.55-0.95 range
 
     let steps = 0;
     const maxSteps = (Math.abs(endX - x) + Math.abs(endY - y)) * 3; // Allow some wandering
+
+    console.log(`[DungeonGenerator] Drawing corridor with walkSteps=${walkSteps}, diagonals=${enableDiagonals}`);
 
     // Random walk towards end - carve as we go
     while ((x !== endX || y !== endY) && steps < maxSteps) {
@@ -293,28 +297,45 @@ export class DungeonGenerator extends MapGenerator {
       const dy = endY - y;
 
       // Decide next step with bias towards target
-      if (Math.abs(dx) > Math.abs(dy)) {
-        // Horizontal movement preferred
-        if (this.random.next() < targetBias || dy === 0) {
-          // Move towards target horizontally
+      if (enableDiagonals && Math.abs(dx) > 0 && Math.abs(dy) > 0) {
+        // Diagonal movement enabled - can move in 8 directions
+        if (this.random.next() < targetBias) {
+          // Move diagonally towards target
           x += dx > 0 ? 1 : -1;
-        } else {
-          // Move vertically (perpendicular)
           y += dy > 0 ? 1 : -1;
+        } else {
+          // Occasional perpendicular movement for organic feel
+          if (this.random.next() > 0.5) {
+            x += dx > 0 ? 1 : -1;
+          } else {
+            y += dy > 0 ? 1 : -1;
+          }
         }
       } else {
-        // Vertical movement preferred
-        if (this.random.next() < targetBias || dx === 0) {
-          // Move towards target vertically
-          y += dy > 0 ? 1 : -1;
+        // Standard 4-directional movement (orthogonal only)
+        if (Math.abs(dx) > Math.abs(dy)) {
+          // Horizontal movement preferred
+          if (this.random.next() < targetBias || dy === 0) {
+            // Move towards target horizontally
+            x += dx > 0 ? 1 : -1;
+          } else {
+            // Move vertically (perpendicular)
+            y += dy > 0 ? 1 : -1;
+          }
         } else {
-          // Move horizontally (perpendicular)
-          x += dx > 0 ? 1 : -1;
+          // Vertical movement preferred
+          if (this.random.next() < targetBias || dx === 0) {
+            // Move towards target vertically
+            y += dy > 0 ? 1 : -1;
+          } else {
+            // Move horizontally (perpendicular)
+            x += dx > 0 ? 1 : -1;
+          }
         }
       }
 
       // Add occasional random jog for organic feel (less often)
-      if (this.random.next() < organicFactor / 3) {
+      if (!enableDiagonals && this.random.next() < organicFactor / 3) {
         if (this.random.next() > 0.5 && dy !== 0) {
           y += dy > 0 ? 1 : -1;
         } else if (dx !== 0) {

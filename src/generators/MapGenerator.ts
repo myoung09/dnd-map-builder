@@ -1,9 +1,17 @@
-// Abstract base class for map generators
+// Abstract base class for map generators with generic grid cell types
 
 import { MapData, GeneratorParameters } from '../types/generator';
 import { SeededRandom } from '../utils/random';
 
-export abstract class MapGenerator<T extends MapData = MapData> {
+/**
+ * Abstract base class for all terrain generators with TypeScript generics
+ * @template TData - The specific MapData type returned by the generator
+ * @template TCellType - The type of cell values in the grid (defaults to number)
+ */
+export abstract class MapGenerator<
+  TData extends MapData = MapData,
+  TCellType = number
+> {
   protected width: number;
   protected height: number;
   protected seed: number;
@@ -19,10 +27,10 @@ export abstract class MapGenerator<T extends MapData = MapData> {
   }
 
   // Abstract method to be implemented by subclasses
-  abstract generate(): T;
+  abstract generate(): TData;
 
-  // Helper method to create empty grid
-  protected createEmptyGrid(fillValue: number = 0): number[][] {
+  // Helper method to create empty grid with generic cell type
+  protected createEmptyGrid(fillValue: TCellType = 0 as TCellType): TCellType[][] {
     return Array(this.height)
       .fill(null)
       .map(() => Array(this.width).fill(fillValue));
@@ -33,8 +41,13 @@ export abstract class MapGenerator<T extends MapData = MapData> {
     return x >= 0 && x < this.width && y >= 0 && y < this.height;
   }
 
-  // Helper method to count neighbors (for cellular automata)
-  protected countNeighbors(grid: number[][], x: number, y: number, value: number = 1): number {
+  // Helper method to count neighbors (for cellular automata) with generic cell type
+  protected countNeighbors(
+    grid: TCellType[][],
+    x: number,
+    y: number,
+    value: TCellType
+  ): number {
     let count = 0;
     for (let dy = -1; dy <= 1; dy++) {
       for (let dx = -1; dx <= 1; dx++) {

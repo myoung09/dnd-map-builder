@@ -26,6 +26,15 @@ export interface Tree {
   clusterId?: number; // Optional: ID of the cluster this tree belongs to
 }
 
+export interface TreeCluster {
+  id: number;
+  centerX: number;
+  centerY: number;
+  radius: number;
+  treeCount: number;
+  trees: Tree[];
+}
+
 export interface PathPoint {
   x: number;
   y: number;
@@ -69,6 +78,7 @@ export interface GeneratorParameters {
   clusterRadius?: number; // Radius of each cluster in grid units (default: 8)
   clearingSize?: number; // Minimum width of walkable clearings (default: 6)
   numClusters?: number; // Number of tree clusters to generate (default: auto-calculated)
+  branchPathDensity?: number; // Controls density of branch paths: 0 = none, 0.5 = moderate, 1.0 = dense (default: 0.5)
   
   // Cave parameters
   fillProbability?: number;

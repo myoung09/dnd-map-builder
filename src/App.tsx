@@ -98,6 +98,12 @@ function App() {
     }
   };
 
+  const handleExportSVG = () => {
+    if (mapData) {
+      ExportUtils.exportMapToSVG(mapData, cellSize, `map-${terrain}-${mapData.seed}.svg`);
+    }
+  };
+
   const handleImportJSON = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
@@ -119,6 +125,26 @@ function App() {
         alert('Failed to import map: ' + (error as Error).message);
       }
     }
+  };
+
+  const handleCopyToClipboard = () => {
+    if (!mapData) return;
+    
+    // Create shareable text with seed and parameters
+    const shareText = `DnD Map Generator - ${mapData.terrainType}
+Seed: ${mapData.seed}
+Dimensions: ${mapData.width}x${mapData.height}
+Parameters: ${JSON.stringify(parameters, null, 2)}
+
+Paste this seed into the generator to recreate this map!`;
+    
+    navigator.clipboard.writeText(shareText)
+      .then(() => {
+        alert('Map parameters copied to clipboard!');
+      })
+      .catch(() => {
+        alert('Failed to copy to clipboard');
+      });
   };
 
   return (
@@ -207,8 +233,14 @@ function App() {
             <button onClick={handleExportPNG} disabled={!mapData}>
               Export PNG
             </button>
+            <button onClick={handleExportSVG} disabled={!mapData}>
+              Export SVG
+            </button>
             <button onClick={handleExportJSON} disabled={!mapData}>
               Export JSON
+            </button>
+            <button onClick={handleCopyToClipboard} disabled={!mapData} title="Copy seed and parameters to clipboard">
+              📋 Copy Seed
             </button>
             <label className="file-button">
               Import JSON

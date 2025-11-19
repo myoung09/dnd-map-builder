@@ -1,6 +1,7 @@
 // MapCanvas Component with layered rendering, organic edge roughening, and export controls
+// Optimized with React.memo and useMemo for performance
 
-import React, { useRef, useEffect, forwardRef, useImperativeHandle, useState } from 'react';
+import React, { useRef, useEffect, forwardRef, useImperativeHandle, useState, useMemo } from 'react';
 import { MapData, TerrainType } from '../types/generator';
 import { ExportUtils } from '../utils/export';
 import { PerlinNoise } from '../utils/noise';
@@ -49,7 +50,7 @@ const TERRAIN_COLORS = {
   }
 };
 
-export const MapCanvas = forwardRef<MapCanvasRef, MapCanvasProps>(({
+export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
   mapData,
   cellSize = 4,
   showGrid = true,
@@ -63,6 +64,7 @@ export const MapCanvas = forwardRef<MapCanvasRef, MapCanvasProps>(({
   const [showExportButtons, setShowExportButtons] = useState(true);
 
   // Perlin noise instance for edge roughening (seeded for consistency)
+  // Memoize to avoid recreation on every render
   const noiseRef = useRef<PerlinNoise>(new PerlinNoise(12345));
 
   // Expose export function
@@ -73,21 +75,20 @@ export const MapCanvas = forwardRef<MapCanvasRef, MapCanvasProps>(({
     }
   }));
 
-  // Handle PNG export
-  const handleExportPNG = () => {
+  // Memoize export handlers to avoid recreation on every render
+  const handleExportPNG = useMemo(() => () => {
     if (!mapData || !terrainCanvasRef.current) return;
     const dataUrl = terrainCanvasRef.current.toDataURL('image/png');
     const link = document.createElement('a');
     link.download = `map-${mapData.terrainType}-${mapData.seed || 'unknown'}.png`;
     link.href = dataUrl;
     link.click();
-  };
+  }, [mapData]);
 
-  // Handle JSON export
-  const handleExportJSON = () => {
+  const handleExportJSON = useMemo(() => () => {
     if (!mapData) return;
     ExportUtils.exportMapToJSON(mapData, `map-${mapData.terrainType}-${mapData.seed || 'unknown'}.json`);
-  };
+  }, [mapData]);
 
   useEffect(() => {
     if (!mapData) return;
@@ -246,6 +247,17 @@ export const MapCanvas = forwardRef<MapCanvasRef, MapCanvasProps>(({
         </button>
       )}
     </div>
+  );
+}), (prevProps, nextProps) => {
+  // Custom comparison function for React.memo
+  // Only re-render if these specific props change
+  return (
+    prevProps.mapData === nextProps.mapData &&
+    prevProps.cellSize === nextProps.cellSize &&
+    prevProps.showGrid === nextProps.showGrid &&
+    prevProps.showRooms === nextProps.showRooms &&
+    prevProps.showCorridors === nextProps.showCorridors &&
+    prevProps.showTrees === nextProps.showTrees
   );
 });
 

@@ -15,7 +15,7 @@ interface BSPNode {
   room?: Room;
 }
 
-export class HouseGenerator extends MapGenerator {
+export class HouseGenerator extends MapGenerator<MapData, number> {
   generate(): MapData {
     const minRoomSize = this.getParam('minRoomSize', 4);
     const maxRoomSize = this.getParam('maxRoomSize', 10);
@@ -48,8 +48,8 @@ export class HouseGenerator extends MapGenerator {
       height: alignedHeight
     };
 
-    // Binary Space Partitioning - recursively split space
-    this.splitNode(root, minRoomSize, gridSize);
+    // Binary Space Partitioning - iteratively split space using queue-based algorithm
+    this.splitNodeIterative(root, minRoomSize, gridSize);
 
     // Create rooms in leaf nodes (BSP guarantees non-overlapping)
     const rooms: Room[] = [];
@@ -182,8 +182,120 @@ export class HouseGenerator extends MapGenerator {
   }
 
   /**
-   * Binary Space Partitioning - recursively split node into two children
+   * Binary Space Partitioning - iteratively split node using queue (non-recursive)
+   * This approach avoids deep recursion issues on large maps and improves performance
+   * Uses breadth-first traversal to build the BSP tree
+   */
+  private splitNodeIterative(root: BSPNode, minSize: number, gridSize: number): void {
+    // Queue for breadth-first traversal (avoids deep recursion)
+    const queue: BSPNode[] = [root];
+    
+    while (queue.length > 0) {
+      const node = queue.shift()!;
+      
+      // Calculate minimum split size (need room for 2 rooms + padding)
+      const minSplitWidth = (minSize + 2) * 2;
+      const minSplitHeight = (minSize + 2) * 2;
+
+      // Stop if node is too small to split
+      if (node.width < minSplitWidth && node.height < minSplitHeight) {
+        continue; // This becomes a leaf node
+      }
+
+      // Decide split direction based on aspect ratio (prefer longer splits)
+      let splitHorizontal: boolean;
+      
+      if (node.width < minSplitWidth) {
+        splitHorizontal = true; // Must split horizontally
+      } else if (node.height < minSplitHeight) {
+        splitHorizontal = false; // Must split vertically
+      } else {
+        // Can split either way - choose based on aspect ratio with randomness
+        const aspectRatio = node.width / node.height;
+        if (aspectRatio > 1.25) {
+          splitHorizontal = this.random.next() < 0.3; // Prefer vertical for wide rooms
+        } else if (aspectRatio < 0.8) {
+          splitHorizontal = this.random.next() < 0.7; // Prefer horizontal for tall rooms
+        } else {
+          splitHorizontal = this.random.next() > 0.5; // Random for square-ish rooms
+        }
+      }
+
+      // Perform the split (grid-aligned)
+      let splitSuccessful = false;
+      
+      if (splitHorizontal && node.height >= minSplitHeight) {
+        // Horizontal split (top/bottom)
+        const minSplitY = node.y + minSize + 2;
+        const maxSplitY = node.y + node.height - minSize - 2;
+        
+        if (maxSplitY > minSplitY) {
+          // Random split position, then snap to grid
+          const randomSplitY = this.random.nextInt(minSplitY, maxSplitY);
+          const splitPos = this.snapToGrid(randomSplitY, gridSize);
+          
+          // Ensure split position is valid after snapping
+          if (splitPos > node.y + minSize && splitPos < node.y + node.height - minSize) {
+            node.left = {
+              x: node.x,
+              y: node.y,
+              width: node.width,
+              height: splitPos - node.y
+            };
+
+            node.right = {
+              x: node.x,
+              y: splitPos,
+              width: node.width,
+              height: node.y + node.height - splitPos
+            };
+            
+            splitSuccessful = true;
+          }
+        }
+      } else if (!splitHorizontal && node.width >= minSplitWidth) {
+        // Vertical split (left/right)
+        const minSplitX = node.x + minSize + 2;
+        const maxSplitX = node.x + node.width - minSize - 2;
+        
+        if (maxSplitX > minSplitX) {
+          // Random split position, then snap to grid
+          const randomSplitX = this.random.nextInt(minSplitX, maxSplitX);
+          const splitPos = this.snapToGrid(randomSplitX, gridSize);
+          
+          // Ensure split position is valid after snapping
+          if (splitPos > node.x + minSize && splitPos < node.x + node.width - minSize) {
+            node.left = {
+              x: node.x,
+              y: node.y,
+              width: splitPos - node.x,
+              height: node.height
+            };
+
+            node.right = {
+              x: splitPos,
+              y: node.y,
+              width: node.x + node.width - splitPos,
+              height: node.height
+            };
+            
+            splitSuccessful = true;
+          }
+        }
+      }
+      
+      // Add children to queue for further splitting
+      if (splitSuccessful) {
+        if (node.left) queue.push(node.left);
+        if (node.right) queue.push(node.right);
+      }
+    }
+  }
+
+  /**
+   * Binary Space Partitioning - recursively split node into two children (LEGACY - kept for reference)
    * Ensures minimum room size constraints and grid alignment
+   * Note: Use splitNodeIterative() for better performance on large maps
    */
   private splitNode(node: BSPNode, minSize: number, gridSize: number): void {
     // Calculate minimum split size (need room for 2 rooms + padding)

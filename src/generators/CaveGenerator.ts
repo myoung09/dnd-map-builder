@@ -26,7 +26,7 @@
 import { MapGenerator } from './MapGenerator';
 import { MapData, TerrainType } from '../types/generator';
 
-export class CaveGenerator extends MapGenerator {
+export class CaveGenerator extends MapGenerator<MapData, number> {
   generate(): MapData {
     console.log('[CaveGenerator] Starting cave generation');
     
@@ -98,7 +98,7 @@ export class CaveGenerator extends MapGenerator {
    * Standard rule is 4+ neighbors = wall, which creates organic, cave-like patterns
    */
   private applyCellularAutomata(oldGrid: number[][], wallThreshold: number): number[][] {
-    const newGrid = this.createEmptyGrid(0);
+    const newGrid = this.createEmptyGrid(0 as number);
 
     for (let y = 0; y < this.height; y++) {
       for (let x = 0; x < this.width; x++) {
@@ -109,7 +109,7 @@ export class CaveGenerator extends MapGenerator {
         }
 
         // Count wall neighbors (including out-of-bounds as walls)
-        const wallCount = this.countNeighbors(oldGrid, x, y, 1);
+        const wallCount = this.countNeighbors(oldGrid, x, y, 1 as number);
 
         // Apply cellular automata rule
         // If 4+ neighbors are walls, become wall; else become open space
@@ -127,6 +127,7 @@ export class CaveGenerator extends MapGenerator {
   /**
    * Ensure connectivity by finding the largest connected region and removing isolated areas
    * Uses flood fill to identify all connected regions, keeps only the largest one
+   * Enhanced to return information about the main chamber
    */
   private ensureConnectivity(grid: number[][]): number[][] {
     // Find all open space regions using flood fill
@@ -158,15 +159,23 @@ export class CaveGenerator extends MapGenerator {
       return grid;
     }
 
-    // Find largest region
+    // Find largest region (main chamber)
     const largestRegion = regions.reduce((largest, current) => 
       current.size > largest.size ? current : largest
     );
     
-    console.log(`[CaveGenerator] Largest region has ${largestRegion.size} cells`);
+    const mainChamberSize = largestRegion.size;
+    const totalOpenSpaces = regions.reduce((sum, region) => sum + region.size, 0);
+    const mainChamberPercentage = ((mainChamberSize / totalOpenSpaces) * 100).toFixed(1);
+    
+    console.log(`[CaveGenerator] Main chamber: ${mainChamberSize} cells (${mainChamberPercentage}% of all open space)`);
+    
+    // Calculate center of main chamber for reference
+    const mainChamberCenter = this.calculateRegionCenter(largestRegion);
+    console.log(`[CaveGenerator] Main chamber center: (${mainChamberCenter.x}, ${mainChamberCenter.y})`);
 
-    // Create new grid with only the largest region
-    const connectedGrid = this.createEmptyGrid(1); // Start with all walls
+    // Create new grid with only the largest region (main chamber)
+    const connectedGrid = this.createEmptyGrid(1 as number); // Start with all walls
 
     // Copy edges (keep as walls)
     for (let x = 0; x < this.width; x++) {
@@ -178,7 +187,7 @@ export class CaveGenerator extends MapGenerator {
       connectedGrid[y][this.width - 1] = 1;
     }
 
-    // Mark cells in largest region as open space
+    // Mark cells in largest region as open space (main chamber)
     largestRegion.forEach(key => {
       const [x, y] = key.split(',').map(Number);
       if (this.inBounds(x, y)) {
@@ -187,6 +196,28 @@ export class CaveGenerator extends MapGenerator {
     });
 
     return connectedGrid;
+  }
+
+  /**
+   * Calculate the center point of a region
+   * Returns the average x,y coordinates of all cells in the region
+   */
+  private calculateRegionCenter(region: Set<string>): { x: number; y: number } {
+    let sumX = 0;
+    let sumY = 0;
+    let count = 0;
+
+    region.forEach(key => {
+      const [x, y] = key.split(',').map(Number);
+      sumX += x;
+      sumY += y;
+      count++;
+    });
+
+    return {
+      x: Math.round(sumX / count),
+      y: Math.round(sumY / count)
+    };
   }
 
   /**
