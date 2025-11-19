@@ -1,8 +1,8 @@
-// Forest Generator with Clustered Trees and Guaranteed Walkable Paths
-// Creates natural-looking tree clumps with clear walkable areas and entrance/exit paths
+// Forest Generator with Dense Tree Coverage and Guaranteed Walkable Paths
+// Creates densely packed forests with clear walkable areas and entrance/exit paths
 
 import { MapGenerator } from './MapGenerator';
-import { MapData, Tree, TreeCluster, PathPoint, TerrainType } from '../types/generator';
+import { MapData, Tree, PathPoint, TerrainType } from '../types/generator';
 import { PerlinNoise } from '../utils/noise';
 import { SeededRandom } from '../utils/random';
 
@@ -18,39 +18,29 @@ export class ForestGenerator extends MapGenerator<MapData, number> {
 
   generate(): MapData {
     // Get parameters with defaults
-    const clusterSize = this.getParam('clusterSize', 8); // Trees per cluster
-    const clusterRadius = this.getParam('clusterRadius', 8); // Cluster radius
     const clearingSize = this.getParam('clearingSize', 6); // Min clearing width
     const treeRadius = this.getParam('treeRadius', 2.5); // Individual tree size (increased from 1.5)
     const minTreeDistance = this.getParam('minTreeDistance', 2); // Min spacing
+    const treeDensity = this.getParam('treeDensity', 0.95); // 0-1, how densely to pack trees (default: very dense)
     
-    // Auto-calculate number of clusters based on map size
-    const mapArea = this.width * this.height;
-    const clusterArea = Math.PI * clusterRadius * clusterRadius;
-    const numClusters = this.getParam('numClusters', Math.floor(mapArea / (clusterArea * 4)));
-    
-    console.log(`[ForestGenerator] Starting clustered forest generation`);
-    console.log(`[ForestGenerator] Map: ${this.width}x${this.height}, Clusters: ${numClusters}`);
-    console.log(`[ForestGenerator] Cluster size: ${clusterSize}, radius: ${clusterRadius}`);
-    console.log(`[ForestGenerator] Clearing size: ${clearingSize}, tree radius: ${treeRadius}`);
+    console.log(`[ForestGenerator] Starting DENSE forest generation`);
+    console.log(`[ForestGenerator] Map: ${this.width}x${this.height}`);
+    console.log(`[ForestGenerator] Tree density: ${treeDensity}, tree radius: ${treeRadius}, min distance: ${minTreeDistance}`);
+    console.log(`[ForestGenerator] Clearing size: ${clearingSize}`);
 
-    // Step 1: Generate cluster centers using Perlin noise for natural distribution
-    const clusters = this.generateClusterCenters(numClusters, clusterRadius, clearingSize);
-    console.log(`[ForestGenerator] Generated ${clusters.length} cluster centers`);
-
-    // Step 2: Generate entrance and exit points
+    // Step 1: Generate entrance and exit points
     const entrance = this.generateEntrancePoint();
     const exit = this.generateExitPoint();
     console.log(`[ForestGenerator] Entrance: (${entrance.x}, ${entrance.y})`);
     console.log(`[ForestGenerator] Exit: (${exit.x}, ${exit.y})`);
 
-    // Step 3: Generate walkable path from entrance to exit
-    const mainPath = this.generatePath(entrance, exit, clusters, clearingSize);
+    // Step 2: Generate walkable path from entrance to exit (without cluster dependency)
+    const mainPath = this.generatePathDirect(entrance, exit, clearingSize);
     console.log(`[ForestGenerator] Generated main path with ${mainPath.length} points`);
 
-    // Step 3.5: Generate branching paths from the main path
+    // Step 3: Generate branching paths from the main path
     const branchPathDensity = this.getParam('branchPathDensity', 0.5); // 0 = none, 1 = dense
-    const branches = this.generateBranchingPaths(mainPath, clusters, clearingSize, branchPathDensity);
+    const branches = this.generateBranchingPathsDirect(mainPath, clearingSize, branchPathDensity);
 
     // Combine all paths for tree placement (main + branches)
     const allPaths = [...mainPath];
@@ -58,22 +48,20 @@ export class ForestGenerator extends MapGenerator<MapData, number> {
       allPaths.push(...branch);
     }
 
-    // Step 4: Populate clusters with trees, avoiding all paths
-    const trees = this.populateClusters(
-      clusters,
-      clusterSize,
-      clusterRadius,
+    // Step 4: Fill entire map with trees using grid-based dense placement
+    const trees = this.fillMapWithTrees(
+      allPaths,
       treeRadius,
       minTreeDistance,
-      allPaths,
-      clearingSize
+      clearingSize,
+      treeDensity
     );
-    console.log(`[ForestGenerator] Placed ${trees.length} trees in ${clusters.length} clusters`);
+    console.log(`[ForestGenerator] Densely placed ${trees.length} trees across entire map`);
 
     // Step 5: Create grid representation
     const grid = this.createGridRepresentation(trees, allPaths, treeRadius, clearingSize);
 
-    console.log(`[ForestGenerator] Forest generation complete`);
+    console.log(`[ForestGenerator] Dense forest generation complete`);
 
     return {
       width: this.width,
@@ -90,75 +78,99 @@ export class ForestGenerator extends MapGenerator<MapData, number> {
   }
 
   /**
-   * Generate cluster centers using Perlin noise for natural placement
+   * Fill entire map with trees using dense grid-based placement
+   * Avoids paths and uses Perlin noise for natural size variation
    */
-  private generateClusterCenters(
-    numClusters: number,
-    clusterRadius: number,
-    clearingSize: number
-  ): TreeCluster[] {
-    const clusters: TreeCluster[] = [];
-    const minDistance = clusterRadius * 2 + clearingSize;
-    const maxAttempts = numClusters * 20; // More attempts for better coverage
+  private fillMapWithTrees(
+    paths: PathPoint[],
+    treeRadius: number,
+    minTreeDistance: number,
+    pathBuffer: number,
+    treeDensity: number
+  ): Tree[] {
+    const trees: Tree[] = [];
+    const pathBufferRadius = pathBuffer / 2;
     
-    // Track attempts for adaptive threshold
-    let attempts = 0;
-    let noiseThreshold = 0.4; // Start with moderate threshold
-    let attemptsSinceLastCluster = 0;
-    
-    console.log(`[ForestGenerator] Generating ${numClusters} cluster centers...`);
-    
-    while (clusters.length < numClusters && attempts < maxAttempts) {
-      attempts++;
-      attemptsSinceLastCluster++;
-      
-      // Adaptively lower noise threshold if we're struggling to place clusters
-      if (attemptsSinceLastCluster > 50 && noiseThreshold > 0.2) {
-        noiseThreshold -= 0.05;
-        attemptsSinceLastCluster = 0;
-        console.log(`[ForestGenerator] Lowering noise threshold to ${noiseThreshold.toFixed(2)}`);
-      }
-      
-      // Generate random position with noise-based bias
-      const x = this.rng.nextInt(clusterRadius, this.width - clusterRadius);
-      const y = this.rng.nextInt(clusterRadius, this.height - clusterRadius);
-      
-      // Use Perlin noise to bias cluster placement (create natural patterns)
-      const noiseValue = this.noise.octaveNoise(
-        x * 0.02,
-        y * 0.02,
-        3,
-        0.5
-      );
-      const normalizedNoise = (noiseValue + 1) / 2;
-      
-      // Skip if noise value is too low (creates natural gaps)
-      if (normalizedNoise < noiseThreshold) continue;
-      
-      // Check distance from existing clusters
-      const tooClose = clusters.some(cluster => {
-        const dx = cluster.centerX - x;
-        const dy = cluster.centerY - y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        return dist < minDistance;
-      });
-      
-      if (!tooClose) {
-        clusters.push({
-          id: clusters.length,
-          centerX: x,
-          centerY: y,
-          radius: clusterRadius,
-          treeCount: 0,
-          trees: []
-        });
-        attemptsSinceLastCluster = 0;
+    // Create a set of path positions for fast lookup
+    const pathSet = new Set<string>();
+    for (const point of paths) {
+      // Mark area around path as blocked
+      for (let dy = -pathBufferRadius; dy <= pathBufferRadius; dy++) {
+        for (let dx = -pathBufferRadius; dx <= pathBufferRadius; dx++) {
+          const px = Math.floor(point.x + dx);
+          const py = Math.floor(point.y + dy);
+          pathSet.add(`${px},${py}`);
+        }
       }
     }
     
-    console.log(`[ForestGenerator] Created ${clusters.length} clusters after ${attempts} attempts (target: ${numClusters})`);
+    console.log(`[ForestGenerator] Path buffer created with ${pathSet.size} blocked cells`);
     
-    return clusters;
+    // Grid-based sampling for dense placement
+    const gridStep = Math.max(1, Math.floor(minTreeDistance * 0.8)); // Slightly overlap for density
+    let attemptedPlacements = 0;
+    let successfulPlacements = 0;
+    
+    for (let y = 0; y < this.height; y += gridStep) {
+      for (let x = 0; x < this.width; x += gridStep) {
+        attemptedPlacements++;
+        
+        // Add small random offset for natural look
+        const offsetX = this.rng.nextFloat(-gridStep * 0.3, gridStep * 0.3);
+        const offsetY = this.rng.nextFloat(-gridStep * 0.3, gridStep * 0.3);
+        const treeX = Math.max(0, Math.min(this.width - 1, x + offsetX));
+        const treeY = Math.max(0, Math.min(this.height - 1, y + offsetY));
+        
+        // Check if position is on path
+        const key = `${Math.floor(treeX)},${Math.floor(treeY)}`;
+        if (pathSet.has(key)) continue;
+        
+        // Use noise-based probability for slight variation (but keep very high)
+        const noiseValue = this.noise.octaveNoise(treeX * 0.05, treeY * 0.05, 2, 0.5);
+        const normalizedNoise = (noiseValue + 1) / 2;
+        if (normalizedNoise < (1 - treeDensity)) continue; // Only skip if noise is very low
+        
+        // Check distance from existing trees (quick rejection)
+        let tooClose = false;
+        const checkRadius = minTreeDistance * 2; // Limit search area
+        
+        for (const existingTree of trees) {
+          // Quick bounds check before distance calculation
+          if (Math.abs(existingTree.x - treeX) > checkRadius || 
+              Math.abs(existingTree.y - treeY) > checkRadius) {
+            continue;
+          }
+          
+          const dx = existingTree.x - treeX;
+          const dy = existingTree.y - treeY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          
+          if (dist < minTreeDistance) {
+            tooClose = true;
+            break;
+          }
+        }
+        
+        if (tooClose) continue;
+        
+        // Place tree with noise-based size variation
+        const sizeNoise = this.noise.octaveNoise(treeX * 0.1, treeY * 0.1, 2, 0.5);
+        const sizeVariation = 0.7 + ((sizeNoise + 1) / 2) * 0.6; // 0.7 to 1.3 range
+        
+        trees.push({
+          x: treeX,
+          y: treeY,
+          size: Math.round(treeRadius * sizeVariation * 10) / 10,
+          clusterId: 0 // No clusters in dense mode
+        });
+        
+        successfulPlacements++;
+      }
+    }
+    
+    console.log(`[ForestGenerator] Dense placement: ${successfulPlacements}/${attemptedPlacements} trees placed (${(successfulPlacements/attemptedPlacements*100).toFixed(1)}% success rate)`);
+    
+    return trees;
   }
 
   /**
@@ -178,21 +190,20 @@ export class ForestGenerator extends MapGenerator<MapData, number> {
   }
 
   /**
-   * Generate a walkable path from entrance to exit using A* algorithm
+   * Generate a walkable path from entrance to exit using direct waypoint interpolation
+   * No cluster avoidance needed in dense mode
    */
-  private generatePath(
+  private generatePathDirect(
     entrance: PathPoint,
     exit: PathPoint,
-    clusters: TreeCluster[],
     clearingSize: number
   ): PathPoint[] {
-    // Simple path generation using waypoints and interpolation
     const path: PathPoint[] = [];
     
     // Add entrance
     path.push({ ...entrance });
     
-    // Generate waypoints that avoid clusters
+    // Generate waypoints for natural meandering path
     const numWaypoints = 3 + this.rng.nextInt(0, 3);
     const waypoints: PathPoint[] = [];
     
@@ -205,34 +216,8 @@ export class ForestGenerator extends MapGenerator<MapData, number> {
       const offsetX = this.rng.nextInt(-15, 15);
       const offsetY = this.rng.nextInt(-15, 15);
       
-      let x = Math.max(0, Math.min(this.width - 1, baseX + offsetX));
-      let y = Math.max(0, Math.min(this.height - 1, baseY + offsetY));
-      
-      // Move waypoint away from clusters
-      for (let attempt = 0; attempt < 5; attempt++) {
-        let currentX = x;
-        let currentY = y;
-        
-        const nearCluster = clusters.find(cluster => {
-          const dx = cluster.centerX - currentX;
-          const dy = cluster.centerY - currentY;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          return dist < cluster.radius + clearingSize;
-        });
-        
-        if (!nearCluster) break;
-        
-        // Move perpendicular to cluster center
-        const dx = currentX - nearCluster.centerX;
-        const dy = currentY - nearCluster.centerY;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist > 0) {
-          x += Math.floor((dx / dist) * clearingSize);
-          y += Math.floor((dy / dist) * clearingSize);
-          x = Math.max(0, Math.min(this.width - 1, x));
-          y = Math.max(0, Math.min(this.height - 1, y));
-        }
-      }
+      const x = Math.max(clearingSize, Math.min(this.width - clearingSize, baseX + offsetX));
+      const y = Math.max(clearingSize, Math.min(this.height - clearingSize, baseY + offsetY));
       
       waypoints.push({ x, y });
     }
@@ -272,13 +257,12 @@ export class ForestGenerator extends MapGenerator<MapData, number> {
   }
 
   /**
-   * Generate branching paths from the main path
+   * Generate branching paths from the main path (direct version without cluster checking)
    * Creates side trails that wander into the forest
    * @param branchPathDensity - Controls number of branches: 0 = none, 0.5 = moderate, 1.0 = very dense
    */
-  private generateBranchingPaths(
+  private generateBranchingPathsDirect(
     mainPath: PathPoint[],
-    clusters: TreeCluster[],
     clearingSize: number,
     branchPathDensity: number = 0.5
   ): PathPoint[][] {
@@ -318,11 +302,10 @@ export class ForestGenerator extends MapGenerator<MapData, number> {
       const baseBranchLength = 15 + this.rng.nextInt(0, 25); // 15-40 units base
       const branchLength = Math.floor(baseBranchLength * (0.5 + branchPathDensity * 0.75)); // Scale by density
       
-      const branch = this.createBranchPath(
+      const branch = this.createBranchPathDirect(
         branchStart,
         directionAngle,
         branchLength,
-        clusters,
         clearingSize
       );
       
@@ -340,13 +323,12 @@ export class ForestGenerator extends MapGenerator<MapData, number> {
   }
 
   /**
-   * Create a single meandering branch path
+   * Create a single meandering branch path (direct version without cluster checking)
    */
-  private createBranchPath(
+  private createBranchPathDirect(
     start: PathPoint,
     initialAngle: number,
     length: number,
-    clusters: TreeCluster[],
     clearingSize: number
   ): PathPoint[] {
     const branch: PathPoint[] = [];
@@ -371,91 +353,10 @@ export class ForestGenerator extends MapGenerator<MapData, number> {
         y: Math.floor(currentY)
       };
       
-      // Check if we're too close to a cluster center (avoid dead-ending in trees)
-      const tooCloseToCluster = clusters.some(cluster => {
-        const dx = cluster.centerX - point.x;
-        const dy = cluster.centerY - point.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        return dist < cluster.radius * 0.5; // Stop if getting too deep into a cluster
-      });
-      
-      if (tooCloseToCluster) {
-        break; // End this branch here
-      }
-      
       branch.push(point);
     }
     
     return branch;
-  }
-
-  /**
-   * Populate each cluster with trees using Poisson disk sampling
-   */
-  private populateClusters(
-    clusters: TreeCluster[],
-    clusterSize: number,
-    clusterRadius: number,
-    treeRadius: number,
-    minTreeDistance: number,
-    path: PathPoint[],
-    clearingSize: number
-  ): Tree[] {
-    const trees: Tree[] = [];
-    const pathBuffer = clearingSize / 2;
-    
-    for (const cluster of clusters) {
-      const clusterTrees: Tree[] = [];
-      const attempts = clusterSize * 5;
-      
-      for (let i = 0; i < attempts && clusterTrees.length < clusterSize; i++) {
-        // Generate random position within cluster radius
-        const angle = this.rng.nextFloat(0, Math.PI * 2);
-        const dist = this.rng.nextFloat(0, clusterRadius);
-        const x = Math.floor(cluster.centerX + Math.cos(angle) * dist);
-        const y = Math.floor(cluster.centerY + Math.sin(angle) * dist);
-        
-        // Check bounds
-        if (!this.inBounds(x, y)) continue;
-        
-        // Check distance from path
-        const tooCloseToPath = path.some(p => {
-          const dx = p.x - x;
-          const dy = p.y - y;
-          return Math.sqrt(dx * dx + dy * dy) < pathBuffer;
-        });
-        if (tooCloseToPath) continue;
-        
-        // Check distance from other trees
-        const tooCloseToTree = trees.some(t => {
-          const dx = t.x - x;
-          const dy = t.y - y;
-          return Math.sqrt(dx * dx + dy * dy) < minTreeDistance;
-        });
-        if (tooCloseToTree) continue;
-        
-        const tooCloseInCluster = clusterTrees.some((t: Tree) => {
-          const dx = t.x - x;
-          const dy = t.y - y;
-          return Math.sqrt(dx * dx + dy * dy) < minTreeDistance;
-        });
-        if (tooCloseInCluster) continue;
-        
-        // Add tree with size variation
-        const sizeVariation = 0.8 + this.rng.nextFloat(0, 0.4);
-        clusterTrees.push({
-          x,
-          y,
-          size: Math.round(treeRadius * sizeVariation * 10) / 10,
-          clusterId: cluster.id
-        });
-      }
-      
-      cluster.treeCount = clusterTrees.length;
-      trees.push(...clusterTrees);
-    }
-    
-    return trees;
   }
 
   /**
@@ -469,15 +370,17 @@ export class ForestGenerator extends MapGenerator<MapData, number> {
   ): number[][] {
     const grid = this.createEmptyGrid(0);
     
-    // Mark trees
+    // Mark trees (round coordinates to integers for grid placement)
     for (const tree of trees) {
+      const treeX = Math.floor(tree.x);
+      const treeY = Math.floor(tree.y);
       const radius = Math.ceil(tree.size || treeRadius);
       for (let dy = -radius; dy <= radius; dy++) {
         for (let dx = -radius; dx <= radius; dx++) {
           const dist = Math.sqrt(dx * dx + dy * dy);
           if (dist <= radius) {
-            const x = tree.x + dx;
-            const y = tree.y + dy;
+            const x = treeX + dx;
+            const y = treeY + dy;
             if (this.inBounds(x, y)) {
               grid[y][x] = 1; // Tree
             }
@@ -491,8 +394,8 @@ export class ForestGenerator extends MapGenerator<MapData, number> {
     for (const point of path) {
       for (let dy = -pathWidth; dy <= pathWidth; dy++) {
         for (let dx = -pathWidth; dx <= pathWidth; dx++) {
-          const x = point.x + dx;
-          const y = point.y + dy;
+          const x = Math.floor(point.x) + dx;
+          const y = Math.floor(point.y) + dy;
           if (this.inBounds(x, y)) {
             grid[y][x] = 2; // Path (overrides trees)
           }
