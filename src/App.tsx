@@ -1,16 +1,21 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import './App.css';
 import { TerrainType, GeneratorParameters, MapData } from './types/generator';
+import { PlacedObject, PlacementMode, SpriteSheet, ObjectCategory } from './types/objects';
 import { TerrainSelector } from './components/TerrainSelector';
 import { PresetSelector } from './components/PresetSelector';
 import { ParameterForm } from './components/ParameterForm';
 import { MapCanvas, MapCanvasRef } from './components/MapCanvas';
+import ObjectPalette from './components/ObjectPalette';
+import TopMenuBar from './components/TopMenuBar';
 import { HouseGenerator } from './generators/HouseGenerator';
 import { ForestGenerator } from './generators/ForestGenerator';
 import { CaveGenerator } from './generators/CaveGenerator';
 import { DungeonGenerator } from './generators/DungeonGenerator';
 import { getPresetByName, getPresetsByTerrain } from './utils/presets';
 import { ExportUtils } from './utils/export';
+import { createSpriteSheet } from './utils/spritesheet';
+import { Box } from '@mui/material';
 
 function App() {
   const [terrain, setTerrain] = useState<TerrainType>(TerrainType.Dungeon);
@@ -31,6 +36,14 @@ function App() {
   const [showCorridors, setShowCorridors] = useState(true);
   const [showTrees, setShowTrees] = useState(true);
   const [cellSize, setCellSize] = useState(4);
+  
+  // Object placement state
+  const [placedObjects, setPlacedObjects] = useState<PlacedObject[]>([]);
+  const [spritesheets, setSpritesheets] = useState<SpriteSheet[]>([]);
+  const [selectedSpriteId, setSelectedSpriteId] = useState<string | null>(null);
+  const [placementMode, setPlacementMode] = useState<PlacementMode>(PlacementMode.None);
+  const [showObjectLayer, setShowObjectLayer] = useState(true);
+  const [showPalette, setShowPalette] = useState(false);
   
   const canvasRef = useRef<MapCanvasRef>(null);
 
@@ -147,8 +160,63 @@ Paste this seed into the generator to recreate this map!`;
       });
   };
 
+  // Object placement handlers
+  const handleObjectPlace = useCallback((obj: PlacedObject) => {
+    setPlacedObjects(prev => [...prev, obj]);
+    console.log('[App] Placed object:', obj);
+  }, []);
+
+  const handleObjectDelete = useCallback((objId: string | null) => {
+    if (!objId) return;
+    setPlacedObjects(prev => prev.filter(o => o.id !== objId));
+    console.log('[App] Deleted object:', objId);
+  }, []);
+
+  const handleTogglePalette = useCallback(() => {
+    setShowPalette(prev => !prev);
+  }, []);
+
+  // Load spritesheets (placeholder - add real assets later)
+  useEffect(() => {
+    const loadAssets = async () => {
+      try {
+        // Placeholder: In production, load real spritesheets here
+        // Example:
+        // const sheets = await Promise.all([
+        //   createSpriteSheet('forest-veg', 'Forest Vegetation',
+        //     '/assets/spritesheets/forest-vegetation.png',
+        //     64, 64, TerrainType.Forest, ObjectCategory.ForestVegetation),
+        //   // ... more sheets
+        // ]);
+        // setSpritesheets(sheets);
+        
+        console.log('[App] Spritesheet loading placeholder - add assets to enable object placement');
+        setSpritesheets([]);
+      } catch (error) {
+        console.error('[App] Failed to load spritesheets:', error);
+      }
+    };
+    loadAssets();
+  }, []);
+
   return (
-    <div className="App">
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+      {/* Top Menu Bar */}
+      <TopMenuBar
+        placementMode={placementMode}
+        onPlacementModeChange={setPlacementMode}
+        showGrid={showGrid}
+        onToggleGrid={() => setShowGrid(!showGrid)}
+        showObjectLayer={showObjectLayer}
+        onToggleObjectLayer={() => setShowObjectLayer(!showObjectLayer)}
+        showPalette={showPalette}
+        onTogglePalette={handleTogglePalette}
+        onExport={handleExportPNG}
+        disabled={!mapData}
+      />
+      
+      <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        <div className="App">
       <header className="App-header">
         <h1>Procedural Map Generator</h1>
         <p className="subtitle">Generate houses, forests, caves, and dungeons</p>
@@ -274,10 +342,29 @@ Paste this seed into the generator to recreate this map!`;
             showRooms={showRooms}
             showCorridors={showCorridors}
             showTrees={showTrees}
+            showObjects={showObjectLayer}
+            placedObjects={placedObjects}
+            spritesheets={spritesheets}
+            placementMode={placementMode}
+            selectedSpriteId={selectedSpriteId}
+            onObjectPlace={handleObjectPlace}
+            onObjectClick={handleObjectDelete}
           />
         </main>
       </div>
     </div>
+    
+    {/* Object Palette - floating outside the main app structure */}
+    <ObjectPalette
+      spritesheets={spritesheets}
+      terrainType={mapData?.terrainType || TerrainType.Forest}
+      selectedSpriteId={selectedSpriteId}
+      onSpriteSelect={setSelectedSpriteId}
+      onClose={() => setShowPalette(false)}
+      visible={showPalette}
+    />
+    </Box>
+    </Box>
   );
 }
 

@@ -1,10 +1,12 @@
 // MapCanvas Component with layered rendering, organic edge roughening, and export controls
 // Optimized with React.memo and useMemo for performance
 
-import React, { useRef, useEffect, forwardRef, useImperativeHandle, useState, useMemo } from 'react';
+import React, { useRef, useEffect, forwardRef, useImperativeHandle, useState, useMemo, useCallback } from 'react';
 import { MapData, TerrainType } from '../types/generator';
 import { ExportUtils } from '../utils/export';
 import { PerlinNoise } from '../utils/noise';
+import { PlacedObject, PlacementMode, SpriteSheet } from '../types/objects';
+import { getSpriteById, renderSprite } from '../utils/spritesheet';
 
 interface MapCanvasProps {
   mapData: MapData | null;
@@ -13,6 +15,14 @@ interface MapCanvasProps {
   showRooms?: boolean;
   showCorridors?: boolean;
   showTrees?: boolean;
+  // Object placement props
+  showObjects?: boolean;
+  placedObjects?: PlacedObject[];
+  spritesheets?: SpriteSheet[];
+  placementMode?: PlacementMode;
+  selectedSpriteId?: string | null;
+  onObjectPlace?: (obj: PlacedObject) => void;
+  onObjectClick?: (objId: string | null) => void;
 }
 
 export interface MapCanvasRef {
@@ -56,11 +66,19 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
   showGrid = true,
   showRooms = true,
   showCorridors = true,
-  showTrees = true
+  showTrees = true,
+  showObjects = false,
+  placedObjects = [],
+  spritesheets = [],
+  placementMode = PlacementMode.None,
+  selectedSpriteId = null,
+  onObjectPlace,
+  onObjectClick
 }, ref) => {
   const backgroundCanvasRef = useRef<HTMLCanvasElement>(null);
   const terrainCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
+  const objectCanvasRef = useRef<HTMLCanvasElement>(null);
   const [showExportButtons, setShowExportButtons] = useState(true);
 
   // Perlin noise instance for edge roughening (seeded for consistency)
@@ -139,7 +157,83 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
       drawDungeon(terrainCtx, mapData, cellSize, showRooms, showCorridors, noiseRef.current);
     }
 
-  }, [mapData, cellSize, showGrid, showRooms, showCorridors, showTrees]);
+    // Draw object layer
+    const objectCanvas = objectCanvasRef.current;
+    if (objectCanvas && showObjects && placedObjects.length > 0) {
+      objectCanvas.width = width;
+      objectCanvas.height = height;
+      const objectCtx = objectCanvas.getContext('2d');
+      
+      if (objectCtx) {
+        objectCtx.clearRect(0, 0, width, height);
+        
+        // Sort by zIndex for proper layering
+        const sortedObjects = [...placedObjects].sort((a, b) => a.zIndex - b.zIndex);
+        
+        for (const obj of sortedObjects) {
+          const result = getSpriteById(obj.spriteId, spritesheets);
+          if (!result) continue;
+          
+          const { sprite, sheet } = result;
+          
+          // Convert grid position to pixel position (center of cell)
+          const pixelX = (obj.gridX + 0.5) * cellSize;
+          const pixelY = (obj.gridY + 0.5) * cellSize;
+          
+          // Scale sprite to fit cell size
+          const scaleX = (cellSize / sprite.width) * obj.scaleX;
+          const scaleY = (cellSize / sprite.height) * obj.scaleY;
+          
+          renderSprite(objectCtx, sprite, sheet, pixelX, pixelY, scaleX, scaleY, obj.rotation);
+        }
+        
+        console.log(`[MapCanvas] Rendered ${sortedObjects.length} objects`);
+      }
+    }
+
+  }, [mapData, cellSize, showGrid, showRooms, showCorridors, showTrees, showObjects, placedObjects, spritesheets]);
+
+  // Handle canvas clicks for object placement/deletion
+  const handleCanvasClick = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!mapData) return;
+    
+    const canvas = event.currentTarget;
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    const gridX = Math.floor(x / cellSize);
+    const gridY = Math.floor(y / cellSize);
+    
+    // Boundary check
+    if (gridX < 0 || gridX >= mapData.width || gridY < 0 || gridY >= mapData.height) {
+      return;
+    }
+    
+    if (placementMode === PlacementMode.Place && selectedSpriteId && onObjectPlace) {
+      // Place new object
+      const newObject: PlacedObject = {
+        id: `obj_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        spriteId: selectedSpriteId,
+        gridX,
+        gridY,
+        scaleX: 1,
+        scaleY: 1,
+        rotation: 0,
+        zIndex: placedObjects.length
+      };
+      onObjectPlace(newObject);
+      console.log(`[MapCanvas] Placed object at (${gridX}, ${gridY})`);
+    } else if (placementMode === PlacementMode.Delete && onObjectClick) {
+      // Find and delete object at this position
+      const clickedObject = placedObjects.find(
+        obj => obj.gridX === gridX && obj.gridY === gridY
+      );
+      if (clickedObject) {
+        onObjectClick(clickedObject.id);
+        console.log(`[MapCanvas] Deleted object at (${gridX}, ${gridY})`);
+      }
+    }
+  }, [mapData, cellSize, placementMode, selectedSpriteId, placedObjects, onObjectPlace, onObjectClick]);
 
   if (!mapData) {
     return (
@@ -154,6 +248,18 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
       <div className="canvas-stack">
         <canvas ref={backgroundCanvasRef} className="canvas-layer" />
         <canvas ref={terrainCanvasRef} className="canvas-layer" />
+        <canvas 
+          ref={objectCanvasRef} 
+          className="canvas-layer"
+          onClick={handleCanvasClick}
+          style={{
+            pointerEvents: placementMode !== PlacementMode.None ? 'auto' : 'none',
+            opacity: showObjects ? 1 : 0,
+            transition: 'opacity 0.2s',
+            cursor: placementMode === PlacementMode.Place ? 'crosshair' : 
+                    placementMode === PlacementMode.Delete ? 'not-allowed' : 'default'
+          }}
+        />
         <canvas ref={overlayCanvasRef} className="canvas-layer" />
       </div>
       
@@ -257,7 +363,12 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
     prevProps.showGrid === nextProps.showGrid &&
     prevProps.showRooms === nextProps.showRooms &&
     prevProps.showCorridors === nextProps.showCorridors &&
-    prevProps.showTrees === nextProps.showTrees
+    prevProps.showTrees === nextProps.showTrees &&
+    prevProps.showObjects === nextProps.showObjects &&
+    prevProps.placedObjects === nextProps.placedObjects &&
+    prevProps.spritesheets === nextProps.spritesheets &&
+    prevProps.placementMode === nextProps.placementMode &&
+    prevProps.selectedSpriteId === nextProps.selectedSpriteId
   );
 });
 
