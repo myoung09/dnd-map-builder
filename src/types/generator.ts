@@ -53,6 +53,7 @@ export interface MapData {
   grid?: number[][];
   seed?: number;
   terrainType?: TerrainType;
+  placedObjects?: any[]; // Array of PlacedObject instances (imported separately to avoid circular deps)
 }
 
 export interface GeneratorParameters {
