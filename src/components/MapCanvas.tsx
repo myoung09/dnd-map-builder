@@ -303,63 +303,169 @@ function drawForest(
   noise: PerlinNoise
 ) {
   console.log(`[drawForest] Called with showTrees=${showTrees}, trees count=${mapData.trees?.length || 0}`);
-  console.log(`[drawForest] cellSize=${cellSize}`);
-  
-  if (!showTrees || !mapData.trees) {
-    console.log(`[drawForest] Early return - showTrees=${showTrees}, has trees=${!!mapData.trees}`);
-    return;
+  console.log(`[drawForest] Has path: ${!!mapData.paths}, path length: ${mapData.paths?.length || 0}`);
+  console.log(`[drawForest] Has branches: ${!!mapData.branchPaths}, branch count: ${mapData.branchPaths?.length || 0}`);
+  console.log(`[drawForest] Entrance: ${JSON.stringify(mapData.entrance)}, Exit: ${JSON.stringify(mapData.exit)}`);
+
+  // Step 1: Draw walkable paths (main path + branches)
+  const drawPath = (pathPoints: typeof mapData.paths, isDark = false) => {
+    if (!pathPoints || pathPoints.length === 0) return;
+    
+    // Draw path as brown trail
+    ctx.strokeStyle = isDark ? '#7a6549' : '#8b7355'; // Slightly darker for branches
+    ctx.lineWidth = cellSize * 4; // Wide path
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    
+    ctx.beginPath();
+    ctx.moveTo(pathPoints[0].x * cellSize, pathPoints[0].y * cellSize);
+    
+    for (let i = 1; i < pathPoints.length; i++) {
+      ctx.lineTo(pathPoints[i].x * cellSize, pathPoints[i].y * cellSize);
+    }
+    
+    ctx.stroke();
+    
+    // Add lighter center to path for depth
+    ctx.strokeStyle = isDark ? '#9a8066' : '#a59076';
+    ctx.lineWidth = cellSize * 2;
+    
+    ctx.beginPath();
+    ctx.moveTo(pathPoints[0].x * cellSize, pathPoints[0].y * cellSize);
+    
+    for (let i = 1; i < pathPoints.length; i++) {
+      ctx.lineTo(pathPoints[i].x * cellSize, pathPoints[i].y * cellSize);
+    }
+    
+    ctx.stroke();
+  };
+
+  // Draw main path
+  if (mapData.paths) {
+    console.log(`[drawForest] Drawing main path with ${mapData.paths.length} points`);
+    drawPath(mapData.paths, false);
   }
 
-  console.log(`[drawForest] Drawing ${mapData.trees.length} trees`);
-  console.log(`[drawForest] Sample trees:`, mapData.trees.slice(0, 3));
+  // Draw branch paths
+  if (mapData.branchPaths && mapData.branchPaths.length > 0) {
+    console.log(`[drawForest] Drawing ${mapData.branchPaths.length} branch paths`);
+    for (const branch of mapData.branchPaths) {
+      drawPath(branch, true); // Slightly darker for visual distinction
+    }
+  }
 
-  // Note: Background is already light green (clearings) - we only draw trees
-  for (const tree of mapData.trees) {
-    // Calculate center position for circular rendering
-    const centerX = tree.x * cellSize;
-    const centerY = tree.y * cellSize;
-    
-    // Tree radius from stored size (already calculated in generator)
-    const baseRadius = (tree.size || 1.5) * cellSize;
-    
-    // Apply noise-based variation for organic tree shapes
-    const noiseValue = noise.octaveNoise(tree.x * 0.1, tree.y * 0.1, 2, 0.5);
-    const radius = baseRadius * (1 + noiseValue * 0.15);
-    
-    if (mapData.trees.indexOf(tree) === 0) {
-      console.log(`[drawForest] First tree: pos=(${centerX}, ${centerY}), radius=${radius}`);
+  // Step 2: Draw trees (if enabled)
+  if (showTrees && mapData.trees) {
+    console.log(`[drawForest] Drawing ${mapData.trees.length} trees in clusters`);
+
+    // Group trees by cluster for visual distinction
+    const clusterMap = new Map<number, typeof mapData.trees>();
+    for (const tree of mapData.trees) {
+      const clusterId = tree.clusterId ?? 0;
+      if (!clusterMap.has(clusterId)) {
+        clusterMap.set(clusterId, []);
+      }
+      clusterMap.get(clusterId)!.push(tree);
     }
 
-    // Base tree color (dark forest green from palette)
-    ctx.fillStyle = TERRAIN_COLORS.tree;
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Middle layer (medium green) - slightly smaller
-    ctx.fillStyle = '#3d6e1f';
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, radius * 0.75, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Highlight layer (lighter green) - top-left for depth
-    ctx.fillStyle = '#4d8f2a';
-    ctx.beginPath();
-    ctx.arc(
-      centerX - radius * 0.25,
-      centerY - radius * 0.25,
-      radius * 0.4,
-      0,
-      Math.PI * 2
-    );
-    ctx.fill();
+    console.log(`[drawForest] Found ${clusterMap.size} tree clusters`);
 
-    // Subtle outline from palette
-    ctx.strokeStyle = TERRAIN_COLORS.treeStroke;
-    ctx.lineWidth = 1;
+    // Draw each tree with cluster-aware coloring
+    for (const tree of mapData.trees) {
+      const centerX = tree.x * cellSize;
+      const centerY = tree.y * cellSize;
+      const baseRadius = (tree.size || 1.5) * cellSize;
+      
+      // Apply noise-based variation for organic shapes
+      const noiseValue = noise.octaveNoise(tree.x * 0.1, tree.y * 0.1, 2, 0.5);
+      const radius = baseRadius * (1 + noiseValue * 0.15);
+
+      // Vary tree color slightly by cluster for visual distinction
+      const clusterId = tree.clusterId ?? 0;
+      const clusterHueShift = (clusterId * 15) % 45; // Shift hue slightly per cluster
+      
+      // Base tree color (dark forest green)
+      const baseColor = `hsl(${90 + clusterHueShift}, 55%, 20%)`;
+      const midColor = `hsl(${90 + clusterHueShift}, 55%, 28%)`;
+      const highlightColor = `hsl(${90 + clusterHueShift}, 60%, 36%)`;
+
+      // Draw tree in 3 layers for depth
+      ctx.fillStyle = baseColor;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.fillStyle = midColor;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius * 0.75, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.fillStyle = highlightColor;
+      ctx.beginPath();
+      ctx.arc(
+        centerX - radius * 0.25,
+        centerY - radius * 0.25,
+        radius * 0.4,
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
+
+      // Subtle outline
+      ctx.strokeStyle = TERRAIN_COLORS.treeStroke;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
+  // Step 3: Draw entrance marker (left edge)
+  if (mapData.entrance) {
+    console.log(`[drawForest] Drawing entrance at (${mapData.entrance.x}, ${mapData.entrance.y})`);
+    const entranceX = mapData.entrance.x * cellSize;
+    const entranceY = mapData.entrance.y * cellSize;
+    
+    // Draw entrance as green circle with arrow
+    ctx.fillStyle = '#4caf50';
     ctx.beginPath();
-    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    ctx.arc(entranceX, entranceY, cellSize * 3, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.strokeStyle = '#2e7d32';
+    ctx.lineWidth = 2;
     ctx.stroke();
+    
+    // Draw "IN" arrow
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `bold ${cellSize * 2}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('IN', entranceX, entranceY);
+  }
+
+  // Step 4: Draw exit marker (right edge)
+  if (mapData.exit) {
+    console.log(`[drawForest] Drawing exit at (${mapData.exit.x}, ${mapData.exit.y})`);
+    const exitX = mapData.exit.x * cellSize;
+    const exitY = mapData.exit.y * cellSize;
+    
+    // Draw exit as red circle with arrow
+    ctx.fillStyle = '#f44336';
+    ctx.beginPath();
+    ctx.arc(exitX, exitY, cellSize * 3, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.strokeStyle = '#c62828';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    
+    // Draw "OUT" text
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `bold ${cellSize * 1.8}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('OUT', exitX, exitY);
   }
 }
 

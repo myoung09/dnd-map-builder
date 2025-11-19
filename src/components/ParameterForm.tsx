@@ -221,14 +221,56 @@ export const ParameterForm: React.FC<ParameterFormProps> = ({
       {terrain === TerrainType.Forest && (
         <>
           <div className="parameter-group">
-            <label title="Density of trees (0 = sparse, 1 = dense)">
-              <strong>Tree Density:</strong> <span className="param-value">{(parameters.treeDensity || 0.3).toFixed(2)}</span>
+            <label title="Number of tree cluster groups across the map">
+              <strong>Number of Clusters:</strong> <span className="param-value">{parameters.numClusters || 'Auto'}</span>
               <input
                 type="range"
-                min="0"
-                max="100"
-                value={(parameters.treeDensity || 0.3) * 100}
-                onChange={(e) => handleChange('treeDensity', parseInt(e.target.value) / 100)}
+                min="3"
+                max="30"
+                value={parameters.numClusters || 12}
+                onChange={(e) => handleChange('numClusters', parseInt(e.target.value))}
+                className="slider"
+              />
+            </label>
+          </div>
+
+          <div className="parameter-group">
+            <label title="Average number of trees in each cluster">
+              <strong>Cluster Size:</strong> <span className="param-value">{parameters.clusterSize || 8}</span>
+              <input
+                type="range"
+                min="3"
+                max="20"
+                value={parameters.clusterSize || 8}
+                onChange={(e) => handleChange('clusterSize', parseInt(e.target.value))}
+                className="slider"
+              />
+            </label>
+          </div>
+
+          <div className="parameter-group">
+            <label title="Radius of each tree cluster in grid units">
+              <strong>Cluster Radius:</strong> <span className="param-value">{parameters.clusterRadius || 8}</span>
+              <input
+                type="range"
+                min="4"
+                max="15"
+                value={parameters.clusterRadius || 8}
+                onChange={(e) => handleChange('clusterRadius', parseInt(e.target.value))}
+                className="slider"
+              />
+            </label>
+          </div>
+
+          <div className="parameter-group">
+            <label title="Minimum width of walkable clearings between clusters">
+              <strong>Clearing Size:</strong> <span className="param-value">{parameters.clearingSize || 6}</span>
+              <input
+                type="range"
+                min="3"
+                max="12"
+                value={parameters.clearingSize || 6}
+                onChange={(e) => handleChange('clearingSize', parseInt(e.target.value))}
                 className="slider"
               />
             </label>
@@ -236,12 +278,12 @@ export const ParameterForm: React.FC<ParameterFormProps> = ({
 
           <div className="parameter-group">
             <label title="Minimum distance between tree centers (prevents overlapping)">
-              <strong>Min Tree Distance:</strong> <span className="param-value">{parameters.minTreeDistance}</span>
+              <strong>Min Tree Distance:</strong> <span className="param-value">{parameters.minTreeDistance || 2}</span>
               <input
                 type="range"
-                min="2"
-                max="10"
-                value={parameters.minTreeDistance || 3}
+                min="1"
+                max="5"
+                value={parameters.minTreeDistance || 2}
                 onChange={(e) => handleChange('minTreeDistance', parseInt(e.target.value))}
                 className="slider"
               />
@@ -249,27 +291,13 @@ export const ParameterForm: React.FC<ParameterFormProps> = ({
           </div>
 
           <div className="parameter-group">
-            <label title="Perlin noise frequency for organic tree clustering">
-              <strong>Noise Scale:</strong> <span className="param-value">{(parameters.noiseScale || 0.05).toFixed(3)}</span>
+            <label title="Radius of individual tree circles">
+              <strong>Tree Radius:</strong> <span className="param-value">{(parameters.treeRadius || 2.5).toFixed(1)}</span>
               <input
                 type="range"
                 min="10"
-                max="200"
-                value={(parameters.noiseScale || 0.05) * 1000}
-                onChange={(e) => handleChange('noiseScale', parseInt(e.target.value) / 1000)}
-                className="slider"
-              />
-            </label>
-          </div>
-
-          <div className="parameter-group">
-            <label title="Radius of individual tree circles">
-              <strong>Tree Radius:</strong> <span className="param-value">{(parameters.treeRadius || 1.5).toFixed(1)}</span>
-              <input
-                type="range"
-                min="5"
                 max="50"
-                value={(parameters.treeRadius || 1.5) * 10}
+                value={(parameters.treeRadius || 2.5) * 10}
                 onChange={(e) => handleChange('treeRadius', parseInt(e.target.value) / 10)}
                 className="slider"
               />

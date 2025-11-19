@@ -157,13 +157,15 @@ describe('HouseGenerator', () => {
 });
 
 describe('ForestGenerator', () => {
-  it('should generate a valid forest map', () => {
+  it('should generate a valid forest map with clusters', () => {
     const generator = new ForestGenerator({
       width: 80,
       height: 80,
       seed: 12345,
-      treeDensity: 0.3,
-      minTreeDistance: 3
+      clusterSize: 8,
+      clusterRadius: 8,
+      clearingSize: 6,
+      minTreeDistance: 2
     });
 
     const map = generator.generate();
@@ -174,15 +176,37 @@ describe('ForestGenerator', () => {
     expect(map.terrainType).toBe(TerrainType.Forest);
     expect(map.trees).toBeDefined();
     expect(map.trees!.length).toBeGreaterThan(0);
+    expect(map.paths).toBeDefined();
+    expect(map.paths!.length).toBeGreaterThan(0);
+    expect(map.entrance).toBeDefined();
+    expect(map.exit).toBeDefined();
   });
 
-  it('should respect minimum tree distance (Poisson disk sampling)', () => {
-    const minDistance = 5;
+  it('should have entrance on left edge and exit on right edge', () => {
     const generator = new ForestGenerator({
       width: 100,
       height: 100,
       seed: 12345,
-      treeDensity: 0.4,
+      clusterSize: 8
+    });
+
+    const map = generator.generate();
+    
+    expect(map.entrance!.x).toBe(0); // Left edge
+    expect(map.exit!.x).toBe(99); // Right edge
+    expect(map.entrance!.y).toBeGreaterThanOrEqual(0);
+    expect(map.entrance!.y).toBeLessThan(100);
+    expect(map.exit!.y).toBeGreaterThanOrEqual(0);
+    expect(map.exit!.y).toBeLessThan(100);
+  });
+
+  it('should maintain minimum tree spacing within clusters', () => {
+    const minDistance = 2;
+    const generator = new ForestGenerator({
+      width: 100,
+      height: 100,
+      seed: 12345,
+      clusterSize: 10,
       minTreeDistance: minDistance
     });
 
@@ -198,33 +222,71 @@ describe('ForestGenerator', () => {
         const dy = t2.y - t1.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
         
-        // Allow small tolerance for floating point arithmetic
+        // Allow small tolerance for clustering
         expect(distance).toBeGreaterThanOrEqual(minDistance * 0.85);
       }
     }
   });
 
-  it('should generate more trees with higher density', () => {
-    const lowDensityGen = new ForestGenerator({
+  it('should create more trees with larger cluster size', () => {
+    const smallClusterGen = new ForestGenerator({
       width: 100,
       height: 100,
       seed: 11111,
-      treeDensity: 0.2,
-      minTreeDistance: 3
+      clusterSize: 5,
+      numClusters: 10,
+      minTreeDistance: 2
     });
 
-    const highDensityGen = new ForestGenerator({
+    const largeClusterGen = new ForestGenerator({
       width: 100,
       height: 100,
       seed: 11111, // Same seed for fair comparison
-      treeDensity: 0.7,
-      minTreeDistance: 3
+      clusterSize: 15,
+      numClusters: 10,
+      minTreeDistance: 2
     });
 
-    const lowDensityMap = lowDensityGen.generate();
-    const highDensityMap = highDensityGen.generate();
+    const smallClusterMap = smallClusterGen.generate();
+    const largeClusterMap = largeClusterGen.generate();
 
-    expect(highDensityMap.trees!.length).toBeGreaterThan(lowDensityMap.trees!.length);
+    expect(largeClusterMap.trees!.length).toBeGreaterThan(smallClusterMap.trees!.length);
+  });
+
+  it('should respect numClusters parameter', () => {
+    const lowClusterGen = new ForestGenerator({
+      width: 100,
+      height: 100,
+      seed: 99999,
+      clusterSize: 8,
+      numClusters: 5,
+      minTreeDistance: 2
+    });
+
+    const highClusterGen = new ForestGenerator({
+      width: 100,
+      height: 100,
+      seed: 99999, // Same seed for comparison
+      clusterSize: 8,
+      numClusters: 15,
+      minTreeDistance: 2
+    });
+
+    const lowClusterMap = lowClusterGen.generate();
+    const highClusterMap = highClusterGen.generate();
+
+    // Count unique cluster IDs
+    const lowClusterIds = new Set(lowClusterMap.trees!.map(t => t.clusterId));
+    const highClusterIds = new Set(highClusterMap.trees!.map(t => t.clusterId));
+
+    // Should have approximately the requested number of clusters (±2 tolerance for noise filtering)
+    expect(lowClusterIds.size).toBeGreaterThanOrEqual(3);
+    expect(lowClusterIds.size).toBeLessThanOrEqual(7);
+    expect(highClusterIds.size).toBeGreaterThanOrEqual(13);
+    expect(highClusterIds.size).toBeLessThanOrEqual(17);
+
+    // More clusters should definitely have more cluster groups
+    expect(highClusterIds.size).toBeGreaterThan(lowClusterIds.size);
   });
 
   it('should ensure all trees fit within map bounds', () => {
@@ -234,8 +296,8 @@ describe('ForestGenerator', () => {
       width,
       height,
       seed: 54321,
-      treeDensity: 0.5,
-      minTreeDistance: 3
+      clusterSize: 8,
+      minTreeDistance: 2
     });
 
     const map = generator.generate();
@@ -246,6 +308,66 @@ describe('ForestGenerator', () => {
       expect(tree.x).toBeLessThan(width);
       expect(tree.y).toBeGreaterThanOrEqual(0);
       expect(tree.y).toBeLessThan(height);
+    }
+  });
+
+  it('should assign trees to clusters with cluster IDs', () => {
+    const generator = new ForestGenerator({
+      width: 100,
+      height: 100,
+      seed: 12345,
+      clusterSize: 8,
+      numClusters: 5
+    });
+
+    const map = generator.generate();
+    const trees = map.trees!;
+
+    // All trees should have a clusterId
+    for (const tree of trees) {
+      expect(tree.clusterId).toBeDefined();
+      expect(tree.clusterId).toBeGreaterThanOrEqual(0);
+    }
+
+    // Should have multiple different cluster IDs
+    const clusterIds = new Set(trees.map(t => t.clusterId));
+    expect(clusterIds.size).toBeGreaterThan(1);
+  });
+
+  it('should generate a continuous path from entrance to exit', () => {
+    const generator = new ForestGenerator({
+      width: 100,
+      height: 100,
+      seed: 12345,
+      clusterSize: 8
+    });
+
+    const map = generator.generate();
+    const path = map.paths!;
+
+    // Path should have multiple points
+    expect(path.length).toBeGreaterThan(10);
+
+    // Path should start at entrance
+    const firstPoint = path[0];
+    expect(firstPoint.x).toBe(map.entrance!.x);
+    expect(firstPoint.y).toBe(map.entrance!.y);
+
+    // Path should end at exit
+    const lastPoint = path[path.length - 1];
+    expect(lastPoint.x).toBe(map.exit!.x);
+    expect(lastPoint.y).toBe(map.exit!.y);
+
+    // Path points should be continuous (adjacent cells)
+    for (let i = 1; i < path.length; i++) {
+      const prev = path[i - 1];
+      const curr = path[i];
+      const dx = Math.abs(curr.x - prev.x);
+      const dy = Math.abs(curr.y - prev.y);
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      
+      // Points should be reasonably close (allowing diagonal movement)
+      expect(dist).toBeLessThan(5);
     }
   });
 });

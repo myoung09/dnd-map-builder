@@ -23,6 +23,12 @@ export interface Tree {
   x: number;
   y: number;
   size?: number;
+  clusterId?: number; // Optional: ID of the cluster this tree belongs to
+}
+
+export interface PathPoint {
+  x: number;
+  y: number;
 }
 
 export interface MapData {
@@ -31,6 +37,10 @@ export interface MapData {
   rooms?: Room[];
   corridors?: Corridor[];
   trees?: Tree[];
+  paths?: PathPoint[]; // Main walkable path through the map (entrance to exit)
+  branchPaths?: PathPoint[][]; // Optional branching paths (for exploration)
+  entrance?: PathPoint; // Entrance point (e.g., left edge for forests)
+  exit?: PathPoint; // Exit point (e.g., right edge for forests)
   grid?: number[][];
   seed?: number;
   terrainType?: TerrainType;
@@ -55,6 +65,10 @@ export interface GeneratorParameters {
   minTreeDistance?: number;
   noiseScale?: number;
   treeRadius?: number; // Radius of individual tree circles
+  clusterSize?: number; // Average number of trees per cluster (default: 8)
+  clusterRadius?: number; // Radius of each cluster in grid units (default: 8)
+  clearingSize?: number; // Minimum width of walkable clearings (default: 6)
+  numClusters?: number; // Number of tree clusters to generate (default: auto-calculated)
   
   // Cave parameters
   fillProbability?: number;
