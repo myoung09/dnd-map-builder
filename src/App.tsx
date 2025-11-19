@@ -215,14 +215,25 @@ Paste this seed into the generator to recreate this map!`;
         disabled={!mapData}
       />
       
-      <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        <div className="App">
+      <Box sx={{ 
+        display: 'flex', 
+        flex: 1, 
+        overflow: 'hidden',
+        width: '100%'
+      }}>
+        <div style={{ 
+          display: 'flex', 
+          flexDirection: 'column', 
+          width: '100%', 
+          height: '100%',
+          backgroundColor: '#1a1a1a'
+        }}>
       <header className="App-header">
         <h1>Procedural Map Generator</h1>
         <p className="subtitle">Generate houses, forests, caves, and dungeons</p>
       </header>
 
-      <div className="app-container">
+      <div className="app-container" style={{ height: 'calc(100% - 85px)' }}>
         <aside className="control-panel">
           <section className="control-section">
             <TerrainSelector 
