@@ -53,6 +53,7 @@ interface TopMenuBarProps {
   onResetView?: () => void;
   // Campaign workspace controls
   onOpenCampaignWizard?: () => void;
+  onViewWorkspace?: () => void;
   onExportWorkspace?: () => void;
   onImportWorkspace?: () => void;
   hasWorkspace?: boolean;
@@ -75,6 +76,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
   onZoomOut,
   onResetView,
   onOpenCampaignWizard,
+  onViewWorkspace,
   onExportWorkspace,
   onImportWorkspace,
   hasWorkspace = false
@@ -227,6 +229,20 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
               </Button>
             </Tooltip>
           </>
+        )}
+        
+        {onViewWorkspace && hasWorkspace && (
+          <Tooltip title="View Workspace">
+            <Button
+              variant="outlined"
+              startIcon={<MapIcon />}
+              onClick={onViewWorkspace}
+              size="small"
+              color="primary"
+            >
+              Workspace
+            </Button>
+          </Tooltip>
         )}
         
         {onExportWorkspace && hasWorkspace && (

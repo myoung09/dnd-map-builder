@@ -6,7 +6,7 @@ import { Workspace } from './types/workspace';
 import { MapCanvas, MapCanvasRef } from './components/MapCanvas';
 import ObjectPalette from './components/ObjectPalette';
 import { TopMenuBar } from './components/TopMenuBar';
-import ControlDrawer from './components/ControlDrawer';
+import { ControlPanel } from './components/ControlPanel';
 import { CampaignWizard } from './components/CampaignWizard';
 import { WorkspaceView } from './components/WorkspaceView';
 import { HouseGenerator } from './generators/HouseGenerator';
@@ -17,7 +17,7 @@ import { getPresetByName, getPresetsByTerrain } from './utils/presets';
 import { ExportUtils } from './utils/export';
 import { WorkspaceManager } from './utils/workspaceManager';
 import { ParsedCampaignData } from './utils/campaignParser';
-import { Box, ThemeProvider, createTheme, CssBaseline, Drawer } from '@mui/material';
+import { Box, ThemeProvider, createTheme, CssBaseline, Drawer, Tabs, Tab } from '@mui/material';
 
 // Create dark theme following Material Design guidelines
 const darkTheme = createTheme({
@@ -66,6 +66,7 @@ function App() {
   
   // UI state
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState(0); // 0 = Parameters, 1 = Workspace
   const [isGenerating, setIsGenerating] = useState(false);
   
   // Pan and zoom state
@@ -76,7 +77,6 @@ function App() {
   // Campaign workspace state
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
-  const [workspaceViewOpen, setWorkspaceViewOpen] = useState(false);
   
   const canvasRef = useRef<MapCanvasRef>(null);
 
@@ -268,7 +268,8 @@ Paste this seed into the generator to recreate this map!`;
     const newWorkspace = WorkspaceManager.createWorkspaceFromCampaign(parsedData);
     setWorkspace(newWorkspace);
     WorkspaceManager.saveToLocalStorage(newWorkspace);
-    setWorkspaceViewOpen(true);
+    setDrawerOpen(true);
+    setActiveTab(1); // Switch to workspace tab
     console.log('[App] Generated workspace:', newWorkspace);
   }, []);
 
@@ -277,7 +278,7 @@ Paste this seed into the generator to recreate this map!`;
     const map = workspace.maps.find(m => m.id === mapId);
     if (map) {
       setMapData(map.mapData as any);
-      setWorkspaceViewOpen(false);
+      // Keep drawer open so user can continue browsing
     }
   }, [workspace]);
 
@@ -321,7 +322,8 @@ Paste this seed into the generator to recreate this map!`;
           const imported = await WorkspaceManager.importFromFile(file);
           setWorkspace(imported);
           WorkspaceManager.saveToLocalStorage(imported);
-          setWorkspaceViewOpen(true);
+          setDrawerOpen(true);
+          setActiveTab(1); // Switch to workspace tab
           console.log('[App] Imported workspace:', imported);
         } catch (error) {
           console.error('[App] Failed to import workspace:', error);
@@ -330,6 +332,54 @@ Paste this seed into the generator to recreate this map!`;
       }
     };
     input.click();
+  }, []);
+
+  const handleRenameWorkspace = useCallback((newName: string) => {
+    if (!workspace) return;
+    const updatedWorkspace = {
+      ...workspace,
+      metadata: {
+        ...workspace.metadata,
+        name: newName,
+        lastModified: new Date()
+      }
+    };
+    setWorkspace(updatedWorkspace);
+    WorkspaceManager.saveToLocalStorage(updatedWorkspace);
+    console.log('[App] Renamed workspace to:', newName);
+  }, [workspace]);
+
+  const handleClearWorkspace = useCallback(() => {
+    if (!workspace) return;
+    if (window.confirm(`Clear workspace "${workspace.metadata.name}"? This will remove all maps but keep the workspace structure.`)) {
+      const clearedWorkspace = {
+        ...workspace,
+        maps: [],
+        metadata: {
+          ...workspace.metadata,
+          mapCount: 0,
+          lastModified: new Date()
+        }
+      };
+      setWorkspace(clearedWorkspace);
+      WorkspaceManager.saveToLocalStorage(clearedWorkspace);
+      console.log('[App] Cleared workspace');
+    }
+  }, [workspace]);
+
+  const handleAddMap = useCallback(() => {
+    // Switch to parameters tab to generate a new map
+    setActiveTab(0);
+  }, []);
+
+  const handleCloseWorkspace = useCallback(() => {
+    // Just switch back to parameters tab
+    setActiveTab(0);
+  }, []);
+
+  const handleViewWorkspace = useCallback(() => {
+    setDrawerOpen(true);
+    setActiveTab(1);
   }, []);
 
   // Load workspace from localStorage on mount
@@ -434,35 +484,78 @@ Paste this seed into the generator to recreate this map!`;
           onZoomOut={handleZoomOut}
           onResetView={handleResetView}
           onOpenCampaignWizard={() => setWizardOpen(true)}
+          onViewWorkspace={handleViewWorkspace}
           onExportWorkspace={handleExportWorkspace}
           onImportWorkspace={handleImportWorkspace}
           hasWorkspace={workspace !== null}
         />
         
-        {/* Control Drawer */}
-        <ControlDrawer
+        {/* Tabbed Drawer with Parameters and Workspace */}
+        <Drawer
+          anchor="left"
           open={drawerOpen}
           onClose={() => setDrawerOpen(false)}
-          terrain={terrain}
-          onTerrainChange={handleTerrainChange}
-          parameters={parameters}
-          onParameterChange={setParameters}
-          onPresetLoad={handlePresetLoad}
-          onGenerate={generateMap}
-          onRandomSeed={handleRandomSeed}
-          showGrid={showGrid}
-          onToggleGrid={() => setShowGrid(!showGrid)}
-          showRooms={showRooms}
-          onToggleRooms={() => setShowRooms(!showRooms)}
-          showCorridors={showCorridors}
-          onToggleCorridors={() => setShowCorridors(!showCorridors)}
-          showTrees={showTrees}
-          onToggleTrees={() => setShowTrees(!showTrees)}
-          cellSize={cellSize}
-          onCellSizeChange={setCellSize}
-          mapData={mapData}
-          isGenerating={isGenerating}
-        />
+          variant="persistent"
+          PaperProps={{
+            sx: { width: '400px' }
+          }}
+        >
+          <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+            <Tabs
+              value={activeTab}
+              onChange={(_, newValue) => setActiveTab(newValue)}
+              variant="fullWidth"
+              sx={{ borderBottom: 1, borderColor: 'divider' }}
+            >
+              <Tab label="Parameters" />
+              <Tab label="Workspace" disabled={!workspace} />
+            </Tabs>
+            
+            {/* Tab Panel 0: Parameters */}
+            {activeTab === 0 && (
+              <Box sx={{ flex: 1, overflow: 'auto' }}>
+                <ControlPanel
+                  terrain={terrain}
+                  onTerrainChange={handleTerrainChange}
+                  parameters={parameters}
+                  onParameterChange={setParameters}
+                  onPresetLoad={handlePresetLoad}
+                  onGenerate={generateMap}
+                  onRandomSeed={handleRandomSeed}
+                  showGrid={showGrid}
+                  onToggleGrid={() => setShowGrid(!showGrid)}
+                  showRooms={showRooms}
+                  onToggleRooms={() => setShowRooms(!showRooms)}
+                  showCorridors={showCorridors}
+                  onToggleCorridors={() => setShowCorridors(!showCorridors)}
+                  showTrees={showTrees}
+                  onToggleTrees={() => setShowTrees(!showTrees)}
+                  cellSize={cellSize}
+                  onCellSizeChange={setCellSize}
+                  mapData={mapData}
+                  isGenerating={isGenerating}
+                  onClose={() => setDrawerOpen(false)}
+                />
+              </Box>
+            )}
+            
+            {/* Tab Panel 1: Workspace */}
+            {activeTab === 1 && workspace && (
+              <Box sx={{ flex: 1, overflow: 'auto' }}>
+                <WorkspaceView
+                  workspace={workspace}
+                  onSelectMap={handleSelectMap}
+                  onRegenerateMap={handleRegenerateMap}
+                  onDeleteMap={handleDeleteMap}
+                  onRenameWorkspace={handleRenameWorkspace}
+                  onClearWorkspace={handleClearWorkspace}
+                  onAddMap={handleAddMap}
+                  onClose={handleCloseWorkspace}
+                />
+              </Box>
+            )}
+          </Box>
+        </Drawer>
         
         {/* Main Canvas Area */}
         <Box sx={{ 
@@ -518,23 +611,6 @@ Paste this seed into the generator to recreate this map!`;
           onClose={() => setWizardOpen(false)}
           onGenerate={handleGenerateWorkspace}
         />
-
-        {/* Workspace View Drawer */}
-        <Drawer
-          anchor="right"
-          open={workspaceViewOpen}
-          onClose={() => setWorkspaceViewOpen(false)}
-          PaperProps={{
-            sx: { width: '500px' }
-          }}
-        >
-          <WorkspaceView
-            workspace={workspace}
-            onSelectMap={handleSelectMap}
-            onRegenerateMap={handleRegenerateMap}
-            onDeleteMap={handleDeleteMap}
-          />
-        </Drawer>
       </Box>
     </ThemeProvider>
   );
