@@ -23,10 +23,17 @@ interface MapCanvasProps {
   selectedSpriteId?: string | null;
   onObjectPlace?: (obj: PlacedObject) => void;
   onObjectClick?: (objId: string | null) => void;
+  // Pan and zoom props
+  zoom?: number;
+  panX?: number;
+  panY?: number;
+  onZoomChange?: (newZoom: number) => void;
+  onPanChange?: (dx: number, dy: number) => void;
 }
 
 export interface MapCanvasRef {
   exportToPNG: () => string;
+  resetView: () => void;
 }
 
 // Terrain color palette - distinct colors for each element type
@@ -73,23 +80,36 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
   placementMode = PlacementMode.None,
   selectedSpriteId = null,
   onObjectPlace,
-  onObjectClick
+  onObjectClick,
+  zoom = 1,
+  panX = 0,
+  panY = 0,
+  onZoomChange,
+  onPanChange
 }, ref) => {
+  
   const backgroundCanvasRef = useRef<HTMLCanvasElement>(null);
   const terrainCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const objectCanvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [showExportButtons, setShowExportButtons] = useState(true);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
   // Perlin noise instance for edge roughening (seeded for consistency)
   // Memoize to avoid recreation on every render
   const noiseRef = useRef<PerlinNoise>(new PerlinNoise(12345));
 
-  // Expose export function
+  // Expose export function and reset view
   useImperativeHandle(ref, () => ({
     exportToPNG: () => {
       if (!terrainCanvasRef.current) return '';
       return terrainCanvasRef.current.toDataURL('image/png');
+    },
+    resetView: () => {
+      // This will be called from parent to reset pan/zoom
+      // Parent component manages the actual state
     }
   }));
 
@@ -147,13 +167,10 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
 
     // Draw terrain based on type (pass noise instance for edge roughening)
     if (mapData.terrainType === TerrainType.Forest) {
-      console.log(`[MapCanvas] Rendering Forest terrain`);
       drawForest(terrainCtx, mapData, cellSize, showTrees, noiseRef.current);
     } else if (mapData.terrainType === TerrainType.Cave) {
-      console.log(`[MapCanvas] Rendering Cave terrain`);
       drawCave(terrainCtx, mapData, cellSize, noiseRef.current);
     } else if (mapData.terrainType === TerrainType.House || mapData.terrainType === TerrainType.Dungeon) {
-      console.log(`[MapCanvas] Rendering House/Dungeon terrain`);
       drawDungeon(terrainCtx, mapData, cellSize, showRooms, showCorridors, noiseRef.current);
     }
 
@@ -187,7 +204,6 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
           renderSprite(objectCtx, sprite, sheet, pixelX, pixelY, scaleX, scaleY, obj.rotation);
         }
         
-        console.log(`[MapCanvas] Rendered ${sortedObjects.length} objects`);
       }
     }
 
@@ -235,6 +251,42 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
     }
   }, [mapData, cellSize, placementMode, selectedSpriteId, placedObjects, onObjectPlace, onObjectClick]);
 
+  // Mouse wheel zoom handler
+  const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    if (!onZoomChange) return;
+    
+    e.preventDefault();
+    const delta = -e.deltaY * 0.001; // Negative because wheel down should zoom out
+    const newZoom = Math.max(0.5, Math.min(3, zoom + delta));
+    onZoomChange(newZoom);
+  }, [zoom, onZoomChange]);
+
+  // Ctrl+Drag pan handlers
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.ctrlKey && onPanChange) {
+      setIsDragging(true);
+      setDragStart({ x: e.clientX - panX, y: e.clientY - panY });
+      e.preventDefault();
+    }
+  }, [panX, panY, onPanChange]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (isDragging && onPanChange) {
+      const newPanX = e.clientX - dragStart.x;
+      const newPanY = e.clientY - dragStart.y;
+      const dx = newPanX - panX;
+      const dy = newPanY - panY;
+      onPanChange(dx, dy);
+      e.preventDefault();
+    }
+  }, [isDragging, dragStart, panX, panY, onPanChange]);
+
+  const handleMouseUp = useCallback(() => {
+    if (isDragging) {
+      setIsDragging(false);
+    }
+  }, [isDragging]);
+
   if (!mapData) {
     return (
       <div className="map-canvas-placeholder">
@@ -243,9 +295,28 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
     );
   }
 
+  const transformStyle = {
+    transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
+    transformOrigin: 'center center',
+    transition: 'transform 0.1s ease-out'
+  };
+
+  console.log(`[MapCanvas] Transform: zoom=${zoom}, panX=${panX}, panY=${panY}`);
+
   return (
-    <div className="map-canvas-container">
-      <div className="canvas-stack">
+    <div 
+      className="map-canvas-container" 
+      ref={containerRef}
+      onWheel={handleWheel}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+      style={{
+        cursor: isDragging ? 'grabbing' : 'default'
+      }}
+    >
+      <div className="canvas-stack" style={transformStyle}>
         <canvas ref={backgroundCanvasRef} className="canvas-layer" />
         <canvas ref={terrainCanvasRef} className="canvas-layer" />
         <canvas 
@@ -368,7 +439,12 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
     prevProps.placedObjects === nextProps.placedObjects &&
     prevProps.spritesheets === nextProps.spritesheets &&
     prevProps.placementMode === nextProps.placementMode &&
-    prevProps.selectedSpriteId === nextProps.selectedSpriteId
+    prevProps.selectedSpriteId === nextProps.selectedSpriteId &&
+    prevProps.zoom === nextProps.zoom &&
+    prevProps.panX === nextProps.panX &&
+    prevProps.panY === nextProps.panY &&
+    prevProps.onZoomChange === nextProps.onZoomChange &&
+    prevProps.onPanChange === nextProps.onPanChange
   );
 });
 

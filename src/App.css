@@ -277,7 +277,9 @@ button:disabled {
   position: relative;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
   border-radius: 4px;
-  overflow: hidden;
+  overflow: visible; /* Allow transformed canvas to move beyond initial bounds */
+  width: fit-content;
+  height: fit-content;
 }
 
 .canvas-stack {

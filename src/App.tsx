@@ -63,6 +63,11 @@ function App() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   
+  // Pan and zoom state
+  const [zoom, setZoom] = useState(1);
+  const [panX, setPanX] = useState(0);
+  const [panY, setPanY] = useState(0);
+  
   const canvasRef = useRef<MapCanvasRef>(null);
 
   const generateMap = useCallback(() => {
@@ -206,6 +211,96 @@ Paste this seed into the generator to recreate this map!`;
     setShowPalette(prev => !prev);
   }, []);
 
+  // Zoom and pan handlers
+  const handleZoomIn = useCallback(() => {
+    setZoom(prev => {
+      const newZoom = Math.min(prev + 0.1, 3);
+      console.log(`[App] Zoom In: ${prev} -> ${newZoom}`);
+      return newZoom;
+    });
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    setZoom(prev => {
+      const newZoom = Math.max(prev - 0.1, 0.5);
+      console.log(`[App] Zoom Out: ${prev} -> ${newZoom}`);
+      return newZoom;
+    });
+  }, []);
+
+  const handleResetView = useCallback(() => {
+    setZoom(1);
+    setPanX(0);
+    setPanY(0);
+  }, []);
+
+  const handlePan = useCallback((dx: number, dy: number) => {
+    console.log(`[App] Pan called: dx=${dx}, dy=${dy}`);
+    setPanX(prev => {
+      const newPanX = prev + dx;
+      console.log(`[App] panX: ${prev} -> ${newPanX}`);
+      return newPanX;
+    });
+    setPanY(prev => {
+      const newPanY = prev + dy;
+      console.log(`[App] panY: ${prev} -> ${newPanY}`);
+      return newPanY;
+    });
+  }, []);
+
+  const handleZoomChange = useCallback((newZoom: number) => {
+    console.log(`[App] Zoom change: ${zoom} -> ${newZoom}`);
+    setZoom(newZoom);
+  }, [zoom]);
+
+  // Keyboard controls for zoom and pan
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Prevent default for navigation keys when not in input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      const panStep = 50;
+      
+      switch (e.key) {
+        case '+':
+        case '=':
+          e.preventDefault();
+          handleZoomIn();
+          break;
+        case '-':
+        case '_':
+          e.preventDefault();
+          handleZoomOut();
+          break;
+        case '0':
+          e.preventDefault();
+          handleResetView();
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          handlePan(0, panStep);
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          handlePan(0, -panStep);
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          handlePan(panStep, 0);
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          handlePan(-panStep, 0);
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleZoomIn, handleZoomOut, handleResetView, handlePan]);
+
   // Load spritesheets (placeholder - add real assets later)
   useEffect(() => {
     const loadAssets = async () => {
@@ -246,6 +341,10 @@ Paste this seed into the generator to recreate this map!`;
           onTogglePalette={handleTogglePalette}
           onExport={handleExportPNG}
           disabled={!mapData}
+          zoom={zoom}
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
+          onResetView={handleResetView}
         />
         
         {/* Control Drawer */}
@@ -302,6 +401,11 @@ Paste this seed into the generator to recreate this map!`;
               selectedSpriteId={selectedSpriteId}
               onObjectPlace={handleObjectPlace}
               onObjectClick={handleObjectDelete}
+              zoom={zoom}
+              panX={panX}
+              panY={panY}
+              onZoomChange={handleZoomChange}
+              onPanChange={handlePan}
             />
           </Box>
         </Box>

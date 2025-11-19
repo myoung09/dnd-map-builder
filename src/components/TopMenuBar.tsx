@@ -25,6 +25,9 @@ import {
   FileDownload as ExportIcon,
   Palette as PaletteIcon,
   Map as MapIcon,
+  ZoomIn as ZoomInIcon,
+  ZoomOut as ZoomOutIcon,
+  CenterFocusStrong as ResetViewIcon,
 } from '@mui/icons-material';
 import { PlacementMode } from '../types/objects';
 
@@ -40,6 +43,11 @@ interface TopMenuBarProps {
   onTogglePalette: () => void;
   onExport: () => void;
   disabled?: boolean;
+  // Zoom and pan controls
+  zoom?: number;
+  onZoomIn?: () => void;
+  onZoomOut?: () => void;
+  onResetView?: () => void;
 }
 
 export const TopMenuBar: React.FC<TopMenuBarProps> = ({
@@ -53,7 +61,11 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
   showPalette,
   onTogglePalette,
   onExport,
-  disabled = false
+  disabled = false,
+  zoom = 1,
+  onZoomIn,
+  onZoomOut,
+  onResetView
 }) => {
   return (
     <AppBar position="static" elevation={2}>
@@ -140,6 +152,48 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
               disabled={disabled}
             >
               {showObjectLayer ? <LayersIcon /> : <LayersClearIcon />}
+            </IconButton>
+          </Tooltip>
+        </Box>
+        
+        <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
+        
+        {/* Zoom Controls */}
+        <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+          <Tooltip title="Zoom Out (-)">
+            <IconButton
+              color="inherit"
+              onClick={onZoomOut}
+              disabled={disabled || !onZoomOut}
+              size="small"
+            >
+              <ZoomOutIcon />
+            </IconButton>
+          </Tooltip>
+          
+          <Typography variant="body2" sx={{ minWidth: '45px', textAlign: 'center' }}>
+            {Math.round(zoom * 100)}%
+          </Typography>
+          
+          <Tooltip title="Zoom In (+)">
+            <IconButton
+              color="inherit"
+              onClick={onZoomIn}
+              disabled={disabled || !onZoomIn}
+              size="small"
+            >
+              <ZoomInIcon />
+            </IconButton>
+          </Tooltip>
+          
+          <Tooltip title="Reset View (0)">
+            <IconButton
+              color="inherit"
+              onClick={onResetView}
+              disabled={disabled || !onResetView}
+              size="small"
+            >
+              <ResetViewIcon />
             </IconButton>
           </Tooltip>
         </Box>
