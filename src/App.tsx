@@ -2,17 +2,22 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import './App.css';
 import { TerrainType, GeneratorParameters, MapData } from './types/generator';
 import { PlacedObject, PlacementMode, SpriteSheet } from './types/objects';
+import { Workspace } from './types/workspace';
 import { MapCanvas, MapCanvasRef } from './components/MapCanvas';
 import ObjectPalette from './components/ObjectPalette';
 import { TopMenuBar } from './components/TopMenuBar';
 import ControlDrawer from './components/ControlDrawer';
+import { CampaignWizard } from './components/CampaignWizard';
+import { WorkspaceView } from './components/WorkspaceView';
 import { HouseGenerator } from './generators/HouseGenerator';
 import { ForestGenerator } from './generators/ForestGenerator';
 import { CaveGenerator } from './generators/CaveGenerator';
 import { DungeonGenerator } from './generators/DungeonGenerator';
 import { getPresetByName, getPresetsByTerrain } from './utils/presets';
 import { ExportUtils } from './utils/export';
-import { Box, ThemeProvider, createTheme, CssBaseline } from '@mui/material';
+import { WorkspaceManager } from './utils/workspaceManager';
+import { ParsedCampaignData } from './utils/campaignParser';
+import { Box, ThemeProvider, createTheme, CssBaseline, Drawer } from '@mui/material';
 
 // Create dark theme following Material Design guidelines
 const darkTheme = createTheme({
@@ -67,6 +72,11 @@ function App() {
   const [zoom, setZoom] = useState(1);
   const [panX, setPanX] = useState(0);
   const [panY, setPanY] = useState(0);
+
+  // Campaign workspace state
+  const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [workspaceViewOpen, setWorkspaceViewOpen] = useState(false);
   
   const canvasRef = useRef<MapCanvasRef>(null);
 
@@ -253,6 +263,84 @@ Paste this seed into the generator to recreate this map!`;
     setZoom(newZoom);
   }, [zoom]);
 
+  // Campaign Workspace handlers
+  const handleGenerateWorkspace = useCallback((parsedData: ParsedCampaignData) => {
+    const newWorkspace = WorkspaceManager.createWorkspaceFromCampaign(parsedData);
+    setWorkspace(newWorkspace);
+    WorkspaceManager.saveToLocalStorage(newWorkspace);
+    setWorkspaceViewOpen(true);
+    console.log('[App] Generated workspace:', newWorkspace);
+  }, []);
+
+  const handleSelectMap = useCallback((mapId: string) => {
+    if (!workspace) return;
+    const map = workspace.maps.find(m => m.id === mapId);
+    if (map) {
+      setMapData(map.mapData as any);
+      setWorkspaceViewOpen(false);
+    }
+  }, [workspace]);
+
+  const handleRegenerateMap = useCallback((mapId: string) => {
+    if (!workspace) return;
+    const map = workspace.maps.find(m => m.id === mapId);
+    if (map) {
+      // Regenerate the map with a new seed
+      const newSeed = Date.now() + Math.random();
+      const updatedMapData = { ...map.mapData, seed: newSeed } as any;
+      const updatedWorkspace = WorkspaceManager.updateMapInWorkspace(
+        workspace,
+        mapId,
+        { mapData: updatedMapData }
+      );
+      setWorkspace(updatedWorkspace);
+      WorkspaceManager.saveToLocalStorage(updatedWorkspace);
+    }
+  }, [workspace]);
+
+  const handleDeleteMap = useCallback((mapId: string) => {
+    if (!workspace) return;
+    const updatedWorkspace = WorkspaceManager.removeMapFromWorkspace(workspace, mapId);
+    setWorkspace(updatedWorkspace);
+    WorkspaceManager.saveToLocalStorage(updatedWorkspace);
+  }, [workspace]);
+
+  const handleExportWorkspace = useCallback(() => {
+    if (!workspace) return;
+    WorkspaceManager.downloadWorkspace(workspace);
+  }, [workspace]);
+
+  const handleImportWorkspace = useCallback(() => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        try {
+          const imported = await WorkspaceManager.importFromFile(file);
+          setWorkspace(imported);
+          WorkspaceManager.saveToLocalStorage(imported);
+          setWorkspaceViewOpen(true);
+          console.log('[App] Imported workspace:', imported);
+        } catch (error) {
+          console.error('[App] Failed to import workspace:', error);
+          alert('Failed to import workspace: ' + (error instanceof Error ? error.message : 'Unknown error'));
+        }
+      }
+    };
+    input.click();
+  }, []);
+
+  // Load workspace from localStorage on mount
+  useEffect(() => {
+    const saved = WorkspaceManager.loadFromLocalStorage();
+    if (saved) {
+      setWorkspace(saved);
+      console.log('[App] Loaded workspace from localStorage:', saved);
+    }
+  }, []);
+
   // Keyboard controls for zoom and pan
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -345,6 +433,10 @@ Paste this seed into the generator to recreate this map!`;
           onZoomIn={handleZoomIn}
           onZoomOut={handleZoomOut}
           onResetView={handleResetView}
+          onOpenCampaignWizard={() => setWizardOpen(true)}
+          onExportWorkspace={handleExportWorkspace}
+          onImportWorkspace={handleImportWorkspace}
+          hasWorkspace={workspace !== null}
         />
         
         {/* Control Drawer */}
@@ -419,6 +511,30 @@ Paste this seed into the generator to recreate this map!`;
           onClose={() => setShowPalette(false)}
           visible={showPalette}
         />
+
+        {/* Campaign Wizard Dialog */}
+        <CampaignWizard
+          open={wizardOpen}
+          onClose={() => setWizardOpen(false)}
+          onGenerate={handleGenerateWorkspace}
+        />
+
+        {/* Workspace View Drawer */}
+        <Drawer
+          anchor="right"
+          open={workspaceViewOpen}
+          onClose={() => setWorkspaceViewOpen(false)}
+          PaperProps={{
+            sx: { width: '500px' }
+          }}
+        >
+          <WorkspaceView
+            workspace={workspace}
+            onSelectMap={handleSelectMap}
+            onRegenerateMap={handleRegenerateMap}
+            onDeleteMap={handleDeleteMap}
+          />
+        </Drawer>
       </Box>
     </ThemeProvider>
   );

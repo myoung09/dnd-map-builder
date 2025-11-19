@@ -23,11 +23,14 @@ import {
   Layers as LayersIcon,
   LayersClear as LayersClearIcon,
   FileDownload as ExportIcon,
+  FileUpload as ImportIcon,
   Palette as PaletteIcon,
   Map as MapIcon,
   ZoomIn as ZoomInIcon,
   ZoomOut as ZoomOutIcon,
   CenterFocusStrong as ResetViewIcon,
+  AutoAwesome as CampaignWizardIcon,
+  Save as SaveWorkspaceIcon,
 } from '@mui/icons-material';
 import { PlacementMode } from '../types/objects';
 
@@ -48,6 +51,11 @@ interface TopMenuBarProps {
   onZoomIn?: () => void;
   onZoomOut?: () => void;
   onResetView?: () => void;
+  // Campaign workspace controls
+  onOpenCampaignWizard?: () => void;
+  onExportWorkspace?: () => void;
+  onImportWorkspace?: () => void;
+  hasWorkspace?: boolean;
 }
 
 export const TopMenuBar: React.FC<TopMenuBarProps> = ({
@@ -65,7 +73,11 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
   zoom = 1,
   onZoomIn,
   onZoomOut,
-  onResetView
+  onResetView,
+  onOpenCampaignWizard,
+  onExportWorkspace,
+  onImportWorkspace,
+  hasWorkspace = false
 }) => {
   return (
     <AppBar position="static" elevation={2}>
@@ -197,6 +209,49 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
             </IconButton>
           </Tooltip>
         </Box>
+        
+        <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
+        
+        {/* Campaign Workspace Controls */}
+        {onOpenCampaignWizard && (
+          <>
+            <Tooltip title="Campaign Wizard">
+              <Button
+                variant="outlined"
+                startIcon={<CampaignWizardIcon />}
+                onClick={onOpenCampaignWizard}
+                size="small"
+                color="inherit"
+              >
+                Campaign
+              </Button>
+            </Tooltip>
+          </>
+        )}
+        
+        {onExportWorkspace && hasWorkspace && (
+          <Tooltip title="Export Workspace">
+            <IconButton
+              color="inherit"
+              onClick={onExportWorkspace}
+              size="small"
+            >
+              <SaveWorkspaceIcon />
+            </IconButton>
+          </Tooltip>
+        )}
+        
+        {onImportWorkspace && (
+          <Tooltip title="Import Workspace">
+            <IconButton
+              color="inherit"
+              onClick={onImportWorkspace}
+              size="small"
+            >
+              <ImportIcon />
+            </IconButton>
+          </Tooltip>
+        )}
         
         <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
         
