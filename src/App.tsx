@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import './App.css';
 import { TerrainType, GeneratorParameters, MapData } from './types/generator';
 import { PlacedObject, PlacementMode, SpriteSheet, ObjectCategory } from './types/objects';
@@ -41,6 +42,7 @@ const darkTheme = createTheme({
 });
 
 function App() {
+  const navigate = useNavigate();
   const [terrain, setTerrain] = useState<TerrainType>(TerrainType.Dungeon);
   const [parameters, setParameters] = useState<GeneratorParameters>({
     width: 80,
@@ -390,6 +392,25 @@ Paste this seed into the generator to recreate this map!`;
     setDrawerOpen(true);
     setActiveTab(1);
   }, []);
+
+  const handleStartCampaign = useCallback(() => {
+    // Generate a unique session ID
+    const sessionId = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Navigate to DM page with current workspace state
+    navigate('/dm', {
+      state: {
+        mapData,
+        workspace,
+        palette,
+        placedObjects,
+        spritesheets,
+        sessionId
+      }
+    });
+    
+    console.log('[App] Starting campaign with session:', sessionId);
+  }, [navigate, mapData, workspace, palette, placedObjects, spritesheets]);
 
   // Sprite Palette handlers
   const handleUploadSpritesheet = useCallback(async (
@@ -741,6 +762,7 @@ Paste this seed into the generator to recreate this map!`;
           onViewWorkspace={handleViewWorkspace}
           onExportWorkspace={handleExportWorkspace}
           onImportWorkspace={handleImportWorkspace}
+          onStartCampaign={handleStartCampaign}
           hasWorkspace={workspace !== null}
         />
         

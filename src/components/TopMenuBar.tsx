@@ -56,6 +56,7 @@ interface TopMenuBarProps {
   onViewWorkspace?: () => void;
   onExportWorkspace?: () => void;
   onImportWorkspace?: () => void;
+  onStartCampaign?: () => void;
   hasWorkspace?: boolean;
 }
 
@@ -78,6 +79,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
   onOpenCampaignWizard,
   onViewWorkspace,
   onExportWorkspace,
+  onStartCampaign,
   onImportWorkspace,
   hasWorkspace = false
 }) => {
@@ -284,6 +286,23 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
             Export
           </Button>
         </Tooltip>
+
+        {/* Start Campaign */}
+        {onStartCampaign && (
+          <Tooltip title="Start DM Campaign with this workspace">
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<CampaignWizardIcon />}
+              onClick={onStartCampaign}
+              disabled={disabled}
+              size="small"
+              sx={{ ml: 1 }}
+            >
+              Start Campaign
+            </Button>
+          </Tooltip>
+        )}
       </Toolbar>
     </AppBar>
   );

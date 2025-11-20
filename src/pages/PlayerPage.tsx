@@ -111,6 +111,13 @@ export const PlayerPage: React.FC<PlayerPageProps> = ({ sessionId: propSessionId
       if (event.type === WSEventType.SYNC_NOW) {
         const state: DMSessionState = event.payload.sessionState;
         console.log('[PlayerPage] Full sync received:', state);
+        
+        // Update map data if provided
+        if (state.mapData) {
+          setMapData(state.mapData);
+          console.log('[PlayerPage] Map data loaded');
+        }
+        
         setLighting(state.lighting);
         setVisibleObjects(state.objects.filter((o) => o.visibleToPlayers));
       }

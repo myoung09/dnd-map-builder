@@ -1,6 +1,7 @@
 // DM Route - Dungeon Master control interface
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Box,
   Paper,
@@ -64,10 +65,26 @@ function TabPanel(props: TabPanelProps) {
 }
 
 export const DMPage: React.FC = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  
+  // Extract passed state from navigation
+  const passedState = location.state as {
+    mapData?: MapData | null;
+    workspace?: any;
+    palette?: any;
+    placedObjects?: PlacedObject[];
+    spritesheets?: any[];
+    sessionId?: string;
+  } | null;
+  
   const [tabValue, setTabValue] = useState(0);
-  const [sessionId] = useState(`session_${Date.now()}`);
+  const [sessionId] = useState(passedState?.sessionId || `session_${Date.now()}`);
   const [connected, setConnected] = useState(false);
-  const [mapData, setMapData] = useState<MapData | null>(null);
+  const [mapData] = useState<MapData | null>(passedState?.mapData || null);
+  const [placedObjects, setPlacedObjects] = useState<PlacedObject[]>(
+    passedState?.placedObjects || []
+  );
   const canvasRef = useRef<MapCanvasRef>(null);
 
   // Lighting state
@@ -78,8 +95,22 @@ export const DMPage: React.FC = () => {
     lightSources: [],
   });
 
-  // Objects state
-  const [dmObjects, setDmObjects] = useState<DMObject[]>([]);
+  // Objects state - convert PlacedObjects to DMObjects
+  const [dmObjects, setDmObjects] = useState<DMObject[]>(
+    placedObjects.map((obj, index) => ({
+      id: obj.id || `object-${index}`,
+      spriteId: obj.spriteId,
+      x: obj.gridX,
+      y: obj.gridY,
+      category: 'environment', // Default category
+      visibleToPlayers: true,
+      notes: '',
+      scaleX: obj.scaleX,
+      scaleY: obj.scaleY,
+      rotation: obj.rotation,
+      zIndex: obj.zIndex,
+    }))
+  );
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
   // Session state
@@ -93,6 +124,27 @@ export const DMPage: React.FC = () => {
       .then(() => {
         setConnected(true);
         console.log('[DMPage] Connected to session:', sessionId);
+        
+        // Send initial sync with map data to any connected players
+        const initialState: DMSessionState = {
+          sessionId,
+          workspaceId: 'workspace_1',
+          mapId: 'map_1',
+          mapData: mapData,
+          lighting,
+          objects: dmObjects,
+          revealedAreas: [],
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        };
+        
+        wsService.send({
+          type: WSEventType.SYNC_NOW,
+          payload: {
+            sessionState: initialState,
+          },
+        });
+        console.log('[DMPage] Sent initial sync with map data');
       })
       .catch((error) => {
         console.error('[DMPage] Connection failed:', error);
@@ -101,7 +153,7 @@ export const DMPage: React.FC = () => {
     return () => {
       wsService.disconnect();
     };
-  }, [sessionId]);
+  }, [sessionId, mapData, lighting, dmObjects]);
 
   // Handle lighting changes
   const handleBrightnessChange = useCallback((value: number) => {
@@ -194,6 +246,7 @@ export const DMPage: React.FC = () => {
       sessionId,
       workspaceId: 'workspace_1',
       mapId: 'map_1',
+      mapData: mapData,
       lighting,
       objects: dmObjects,
       revealedAreas: [],
@@ -207,7 +260,7 @@ export const DMPage: React.FC = () => {
     });
 
     console.log('[DMPage] Synced session state');
-  }, [sessionId, lighting, dmObjects]);
+  }, [sessionId, mapData, lighting, dmObjects]);
 
   // Handle session save
   const handleSaveSession = useCallback(() => {
@@ -215,6 +268,7 @@ export const DMPage: React.FC = () => {
       sessionId,
       workspaceId: 'workspace_1',
       mapId: 'map_1',
+      mapData: mapData,
       lighting,
       objects: dmObjects,
       revealedAreas: [],
@@ -232,58 +286,82 @@ export const DMPage: React.FC = () => {
 
     setLastSaved(new Date());
     console.log('[DMPage] Session saved');
-  }, [sessionId, lighting, dmObjects]);
+  }, [sessionId, mapData, lighting, dmObjects]);
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh', bgcolor: 'background.default' }}>
-      {/* Map Canvas */}
-      <Box sx={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-        <MapCanvas
-          ref={canvasRef}
-          mapData={mapData}
-          cellSize={20}
-          showGrid={true}
-          showRooms={true}
-          showCorridors={true}
-          showTrees={true}
-          showObjects={true}
-          placedObjects={[]}
-          spritesheets={[]}
-        />
-        {/* Connection status */}
-        <Box
-          sx={{
-            position: 'absolute',
-            top: 16,
-            left: 16,
-            zIndex: 1000,
-          }}
-        >
-          <Chip
-            label={connected ? 'Connected' : 'Disconnected'}
-            color={connected ? 'success' : 'error'}
-            size="small"
-          />
-        </Box>
-      </Box>
-
-      {/* Control Panel */}
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: 'background.default' }}>
+      {/* Header */}
       <Paper
         sx={{
-          width: 400,
-          height: '100%',
-          overflow: 'auto',
-          borderLeft: 1,
+          px: 2,
+          py: 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          borderBottom: 1,
           borderColor: 'divider',
         }}
       >
-        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs value={tabValue} onChange={(_, v) => setTabValue(v)} variant="fullWidth">
-            <Tab label="Lighting" />
-            <Tab label="Objects" />
-            <Tab label="Sync" />
-          </Tabs>
+        <Typography variant="h6">DM Campaign View</Typography>
+        <Button
+          variant="outlined"
+          size="small"
+          onClick={() => navigate('/')}
+        >
+          Back to Builder
+        </Button>
+      </Paper>
+
+      {/* Main Content */}
+      <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        {/* Map Canvas */}
+        <Box sx={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+          <MapCanvas
+            ref={canvasRef}
+            mapData={mapData}
+            cellSize={20}
+            showGrid={true}
+            showRooms={true}
+            showCorridors={true}
+            showTrees={true}
+            showObjects={true}
+            placedObjects={[]}
+            spritesheets={[]}
+          />
+          {/* Connection status */}
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 16,
+              left: 16,
+              zIndex: 1000,
+            }}
+          >
+            <Chip
+              label={connected ? 'Connected' : 'Disconnected'}
+              color={connected ? 'success' : 'error'}
+              size="small"
+            />
+          </Box>
         </Box>
+
+        {/* Control Panel */}
+        <Paper
+          sx={{
+            width: 400,
+            height: '100%',
+            overflow: 'auto',
+            borderLeft: 1,
+            borderColor: 'divider',
+          }}
+        >
+          <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+            <Tabs value={tabValue} onChange={(_, v) => setTabValue(v)} variant="fullWidth">
+              <Tab label="Lighting" />
+              <Tab label="Objects" />
+              <Tab label="Sync" />
+            </Tabs>
+          </Box>
 
         {/* Lighting Tab */}
         <TabPanel value={tabValue} index={0}>
@@ -454,8 +532,32 @@ export const DMPage: React.FC = () => {
             <Typography variant="body2" sx={{ fontFamily: 'monospace', mb: 2 }}>
               {sessionId}
             </Typography>
+            
+            <Typography variant="subtitle2" sx={{ mt: 2 }}>Player Link</Typography>
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mt: 1 }}>
+              <TextField
+                size="small"
+                fullWidth
+                value={`${window.location.origin}/player?session=${sessionId}`}
+                InputProps={{
+                  readOnly: true,
+                  sx: { fontFamily: 'monospace', fontSize: '0.875rem' }
+                }}
+              />
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={() => {
+                  navigator.clipboard.writeText(`${window.location.origin}/player?session=${sessionId}`);
+                  // Could add a snackbar notification here
+                }}
+              >
+                Copy
+              </Button>
+            </Box>
+            
             {lastSaved && (
-              <Typography variant="caption" color="text.secondary">
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
                 Last saved: {lastSaved.toLocaleTimeString()}
               </Typography>
             )}
@@ -519,6 +621,7 @@ export const DMPage: React.FC = () => {
           )}
         </TabPanel>
       </Paper>
+      </Box>
     </Box>
   );
 };

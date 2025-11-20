@@ -16,8 +16,26 @@ const server = http.createServer((req, res) => {
   res.end('WebSocket Server Running\n');
 });
 
-// Create WebSocket server
-const wss = new WebSocket.Server({ server });
+// Create WebSocket server with increased message size limit
+const wss = new WebSocket.Server({ 
+  server,
+  maxPayload: 100 * 1024 * 1024, // 100MB max message size
+  perMessageDeflate: {
+    zlibDeflateOptions: {
+      chunkSize: 1024,
+      memLevel: 7,
+      level: 3
+    },
+    zlibInflateOptions: {
+      chunkSize: 10 * 1024
+    },
+    clientNoContextTakeover: true,
+    serverNoContextTakeover: true,
+    serverMaxWindowBits: 10,
+    concurrencyLimit: 10,
+    threshold: 1024
+  }
+});
 
 wss.on('connection', (ws, req) => {
   const query = url.parse(req.url, true).query;
@@ -55,21 +73,28 @@ wss.on('connection', (ws, req) => {
   // Handle incoming messages
   ws.on('message', (message) => {
     try {
-      const event = JSON.parse(message);
-      console.log(`[WebSocket] Received from ${role}:`, event.type);
+      // Convert Buffer to string if needed
+      const messageStr = message.toString();
+      const messageSizeKB = (messageStr.length / 1024).toFixed(2);
+      
+      const event = JSON.parse(messageStr);
+      console.log(`[WebSocket] Received from ${role}: ${event.type} (${messageSizeKB} KB)`);
 
       // Broadcast to appropriate clients
       if (role === 'dm') {
         // DM sends to all players
+        let successCount = 0;
         session.players.forEach((player) => {
           if (player.readyState === WebSocket.OPEN) {
-            player.send(message);
+            player.send(messageStr);
+            successCount++;
           }
         });
+        console.log(`[WebSocket] Broadcast to ${successCount} players`);
       } else {
         // Players send to DM
         if (session.dm && session.dm.readyState === WebSocket.OPEN) {
-          session.dm.send(message);
+          session.dm.send(messageStr);
         }
       }
     } catch (error) {

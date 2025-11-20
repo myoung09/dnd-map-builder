@@ -37,13 +37,21 @@ class WebSocketService {
           resolve();
         };
 
-        this.ws.onmessage = (event) => {
+        this.ws.onmessage = async (event) => {
           try {
-            const wsEvent: WSEvent = JSON.parse(event.data);
-            console.log('[WebSocket] Received event:', wsEvent.type, wsEvent.payload);
+            let data = event.data;
+            
+            // Handle Blob data (happens with large messages)
+            if (data instanceof Blob) {
+              console.log('[WebSocket] Received Blob, converting to text...');
+              data = await data.text();
+            }
+            
+            const wsEvent: WSEvent = JSON.parse(data);
+            console.log('[WebSocket] Received event:', wsEvent.type);
             this.handleEvent(wsEvent);
           } catch (error) {
-            console.error('[WebSocket] Failed to parse message:', error);
+            console.error('[WebSocket] Failed to parse message:', error, 'Data:', event.data);
           }
         };
 
@@ -85,8 +93,20 @@ class WebSocketService {
       return;
     }
 
-    console.log('[WebSocket] Sending event:', event.type, event.payload);
-    this.ws.send(JSON.stringify(event));
+    try {
+      const message = JSON.stringify(event);
+      const sizeKB = (new Blob([message]).size / 1024).toFixed(2);
+      console.log(`[WebSocket] Sending event: ${event.type} (${sizeKB} KB)`);
+      
+      // Warn if message is very large
+      if (parseFloat(sizeKB) > 1000) {
+        console.warn('[WebSocket] Large message detected, may cause performance issues');
+      }
+      
+      this.ws.send(message);
+    } catch (error) {
+      console.error('[WebSocket] Failed to send event:', error);
+    }
   }
 
   on(eventType: WSEventType | 'ALL', listener: EventListener): () => void {
