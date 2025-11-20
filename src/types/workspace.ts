@@ -1,4 +1,5 @@
 import { DnDMap } from './map';
+import { Palette, PlacedSprite } from './palette';
 
 export interface WorkspaceMetadata {
   id: string;
@@ -42,6 +43,7 @@ export interface WorkspaceMap {
   createdAt: Date;
   lastModified: Date;
   mapData: DnDMap;
+  placedSprites?: PlacedSprite[]; // Sprites placed on this map
   isArchived: boolean;
   category: 'dungeon' | 'overworld' | 'city' | 'building' | 'encounter' | 'other';
 }
@@ -51,6 +53,7 @@ export interface Workspace {
   maps: WorkspaceMap[];
   folders: WorkspaceFolder[];
   settings: WorkspaceSettings;
+  palette?: Palette; // Sprite palette for this workspace
 }
 
 export interface WorkspaceFolder {

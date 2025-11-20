@@ -3,12 +3,15 @@ import './App.css';
 import { TerrainType, GeneratorParameters, MapData } from './types/generator';
 import { PlacedObject, PlacementMode, SpriteSheet } from './types/objects';
 import { Workspace } from './types/workspace';
+import { Palette, Sprite, SpriteCategory, PlacedSprite, DEFAULT_CATEGORIES } from './types/palette';
 import { MapCanvas, MapCanvasRef } from './components/MapCanvas';
 import ObjectPalette from './components/ObjectPalette';
 import { TopMenuBar } from './components/TopMenuBar';
 import { ControlPanel } from './components/ControlPanel';
 import { CampaignWizard } from './components/CampaignWizard';
 import { WorkspaceView } from './components/WorkspaceView';
+import { PalettePanel } from './components/PalettePanel';
+import { SpriteUploadDialog } from './components/SpriteUploadDialog';
 import { HouseGenerator } from './generators/HouseGenerator';
 import { ForestGenerator } from './generators/ForestGenerator';
 import { CaveGenerator } from './generators/CaveGenerator';
@@ -17,6 +20,7 @@ import { getPresetByName, getPresetsByTerrain } from './utils/presets';
 import { ExportUtils } from './utils/export';
 import { WorkspaceManager } from './utils/workspaceManager';
 import { ParsedCampaignData } from './utils/campaignParser';
+import { sliceSpritesheet } from './utils/spriteUtils';
 import { Box, ThemeProvider, createTheme, CssBaseline, Drawer, Tabs, Tab } from '@mui/material';
 
 // Create dark theme following Material Design guidelines
@@ -77,6 +81,11 @@ function App() {
   // Campaign workspace state
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
+  
+  // Sprite palette state
+  const [palette, setPalette] = useState<Palette | null>(null);
+  const [placedSprites, setPlacedSprites] = useState<PlacedSprite[]>([]);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   
   const canvasRef = useRef<MapCanvasRef>(null);
 
@@ -382,6 +391,125 @@ Paste this seed into the generator to recreate this map!`;
     setActiveTab(1);
   }, []);
 
+  // Sprite Palette handlers
+  const handleUploadSpritesheet = useCallback(async (
+    file: File,
+    spriteWidth: number,
+    spriteHeight: number,
+    name: string
+  ) => {
+    try {
+      const { spritesheet, sprites } = await sliceSpritesheet(file, spriteWidth, spriteHeight, name);
+      
+      setPalette(prev => {
+        if (!prev) {
+          // Create new palette
+          const newPalette: Palette = {
+            id: `palette_${Date.now()}`,
+            name: 'Sprite Palette',
+            spritesheets: [spritesheet],
+            sprites,
+            categories: [...DEFAULT_CATEGORIES],
+            createdAt: new Date(),
+            modifiedAt: new Date(),
+          };
+          console.log('[App] Created new palette:', newPalette);
+          return newPalette;
+        } else {
+          // Add to existing palette
+          const updatedPalette = {
+            ...prev,
+            spritesheets: [...prev.spritesheets, spritesheet],
+            sprites: [...prev.sprites, ...sprites],
+            modifiedAt: new Date(),
+          };
+          console.log('[App] Added sprites to palette:', sprites.length);
+          return updatedPalette;
+        }
+      });
+
+      setActiveTab(2); // Switch to palette tab
+    } catch (error) {
+      console.error('[App] Failed to upload spritesheet:', error);
+      throw error;
+    }
+  }, []);
+
+  const handleCreateCategory = useCallback((name: string, color: string) => {
+    setPalette(prev => {
+      if (!prev) return prev;
+      const newCategory: SpriteCategory = {
+        id: `category_${Date.now()}`,
+        name,
+        color,
+        order: prev.categories.length,
+      };
+      return {
+        ...prev,
+        categories: [...prev.categories, newCategory],
+        modifiedAt: new Date(),
+      };
+    });
+  }, []);
+
+  const handleDeleteCategory = useCallback((categoryId: string) => {
+    setPalette(prev => {
+      if (!prev) return prev;
+      // Move sprites from deleted category to 'general'
+      const updatedSprites = prev.sprites.map(sprite =>
+        sprite.category === categoryId ? { ...sprite, category: 'general' } : sprite
+      );
+      return {
+        ...prev,
+        sprites: updatedSprites,
+        categories: prev.categories.filter(cat => cat.id !== categoryId),
+        modifiedAt: new Date(),
+      };
+    });
+  }, []);
+
+  const handleMoveSprite = useCallback((spriteId: string, newCategoryId: string) => {
+    setPalette(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        sprites: prev.sprites.map(sprite =>
+          sprite.id === spriteId ? { ...sprite, category: newCategoryId } : sprite
+        ),
+        modifiedAt: new Date(),
+      };
+    });
+  }, []);
+
+  const handleDeleteSprite = useCallback((spriteId: string) => {
+    setPalette(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        sprites: prev.sprites.filter(sprite => sprite.id !== spriteId),
+        modifiedAt: new Date(),
+      };
+    });
+  }, []);
+
+  const handleRenameSprite = useCallback((spriteId: string, newName: string) => {
+    setPalette(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        sprites: prev.sprites.map(sprite =>
+          sprite.id === spriteId ? { ...sprite, name: newName } : sprite
+        ),
+        modifiedAt: new Date(),
+      };
+    });
+  }, []);
+
+  const handleViewPalette = useCallback(() => {
+    setDrawerOpen(true);
+    setActiveTab(2);
+  }, []);
+
   // Load workspace from localStorage on mount
   useEffect(() => {
     const saved = WorkspaceManager.loadFromLocalStorage();
@@ -509,6 +637,7 @@ Paste this seed into the generator to recreate this map!`;
             >
               <Tab label="Parameters" />
               <Tab label="Workspace" disabled={!workspace} />
+              <Tab label="Palette" />
             </Tabs>
             
             {/* Tab Panel 0: Parameters */}
@@ -554,8 +683,32 @@ Paste this seed into the generator to recreate this map!`;
                 />
               </Box>
             )}
+
+            {/* Tab Panel 2: Palette */}
+            {activeTab === 2 && (
+              <Box sx={{ flex: 1, overflow: 'hidden' }}>
+                <PalettePanel
+                  palette={palette}
+                  selectedSpriteId={selectedSpriteId}
+                  onSpriteSelect={setSelectedSpriteId}
+                  onOpenUploadDialog={() => setUploadDialogOpen(true)}
+                  onCreateCategory={handleCreateCategory}
+                  onDeleteCategory={handleDeleteCategory}
+                  onMoveSprite={handleMoveSprite}
+                  onDeleteSprite={handleDeleteSprite}
+                  onRenameSprite={handleRenameSprite}
+                />
+              </Box>
+            )}
           </Box>
         </Drawer>
+
+        {/* Sprite Upload Dialog */}
+        <SpriteUploadDialog
+          open={uploadDialogOpen}
+          onClose={() => setUploadDialogOpen(false)}
+          onUpload={handleUploadSpritesheet}
+        />
         
         {/* Main Canvas Area */}
         <Box sx={{ 
