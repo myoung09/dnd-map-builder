@@ -358,7 +358,7 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
         />
       </div>
       
-      {/* Export controls overlay */}
+      {/* Export controls overlay
       {showExportButtons && (
         <div className="export-controls" style={{
           position: 'absolute',
@@ -423,7 +423,7 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
             ✕
           </button>
         </div>
-      )}
+      )} */}
       
       {/* Show export controls button when hidden */}
       {!showExportButtons && (
