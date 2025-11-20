@@ -227,12 +227,27 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
                     <Typography variant="subtitle2">{category.name}</Typography>
                     <Chip label={sprites.length} size="small" />
                   </Stack>
-                  <IconButton
-                    size="small"
-                    onClick={(e) => handleCategoryMenuOpen(e, category.id)}
+                  <Box
+                    component="div"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCategoryMenuOpen(e, category.id);
+                    }}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: 32,
+                      height: 32,
+                      borderRadius: '50%',
+                      cursor: 'pointer',
+                      '&:hover': {
+                        bgcolor: 'action.hover',
+                      },
+                    }}
                   >
                     <MoreVertIcon fontSize="small" />
-                  </IconButton>
+                  </Box>
                 </AccordionSummary>
                 <AccordionDetails>
                   {sprites.length === 0 ? (
@@ -248,11 +263,16 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
                       }}
                     >
                       {sprites.map((sprite) => (
-                        <Box key={sprite.id}>
+                        <Box 
+                          key={sprite.id}
+                          sx={{
+                            cursor: 'pointer',
+                            position: 'relative',
+                          }}
+                          onClick={() => onSpriteSelect(sprite.id)}
+                        >
                           <Card
                             sx={{
-                              cursor: 'pointer',
-                              position: 'relative',
                               border: selectedSpriteId === sprite.id ? 2 : 0,
                               borderColor: 'primary.main',
                               transition: 'all 0.2s',
@@ -261,7 +281,6 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
                                 boxShadow: 4,
                               },
                             }}
-                            onClick={() => onSpriteSelect(sprite.id)}
                           >
                             <CardMedia
                               component="img"
@@ -274,14 +293,23 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
                                 objectFit: 'contain',
                               }}
                             />
-                            <IconButton
-                              size="small"
+                            <Box
+                              component="div"
                               sx={{
                                 position: 'absolute',
                                 top: 2,
                                 right: 2,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: 28,
+                                height: 28,
+                                borderRadius: '50%',
                                 bgcolor: 'background.paper',
-                                '&:hover': { bgcolor: 'background.default' },
+                                cursor: 'pointer',
+                                '&:hover': {
+                                  bgcolor: 'action.hover',
+                                },
                               }}
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -289,7 +317,7 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
                               }}
                             >
                               <MoreVertIcon fontSize="small" />
-                            </IconButton>
+                            </Box>
                           </Card>
                         </Box>
                       ))}

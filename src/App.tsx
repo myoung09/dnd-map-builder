@@ -1,7 +1,7 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import './App.css';
 import { TerrainType, GeneratorParameters, MapData } from './types/generator';
-import { PlacedObject, PlacementMode, SpriteSheet } from './types/objects';
+import { PlacedObject, PlacementMode, SpriteSheet, ObjectCategory } from './types/objects';
 import { Workspace } from './types/workspace';
 import { Palette, Sprite, SpriteCategory, PlacedSprite, DEFAULT_CATEGORIES } from './types/palette';
 import { MapCanvas, MapCanvasRef } from './components/MapCanvas';
@@ -21,7 +21,7 @@ import { ExportUtils } from './utils/export';
 import { WorkspaceManager } from './utils/workspaceManager';
 import { ParsedCampaignData } from './utils/campaignParser';
 import { sliceSpritesheet } from './utils/spriteUtils';
-import { Box, ThemeProvider, createTheme, CssBaseline, Drawer, Tabs, Tab } from '@mui/material';
+import { Box, ThemeProvider, createTheme, CssBaseline, Drawer, Tabs, Tab, Typography, Button } from '@mui/material';
 
 // Create dark theme following Material Design guidelines
 const darkTheme = createTheme({
@@ -510,6 +510,125 @@ Paste this seed into the generator to recreate this map!`;
     setActiveTab(2);
   }, []);
 
+  // Handle sprite selection from palette - enable placement mode
+  const handleSpriteSelect = useCallback((spriteId: string | null) => {
+    setSelectedSpriteId(spriteId);
+    if (spriteId) {
+      // Automatically enable placement mode when sprite is selected
+      setPlacementMode(PlacementMode.Place);
+      console.log('[App] Sprite selected for placement:', spriteId);
+      
+      // Optional: Show instructions to user
+      // Could add a toast notification here
+    } else {
+      // Deselect and return to normal mode
+      setPlacementMode(PlacementMode.None);
+    }
+  }, []);
+
+  // Convert palette sprites to legacy spritesheet format for canvas rendering
+  // Store loaded images for palette sprites
+  const [paletteImages, setPaletteImages] = useState<Map<string, HTMLImageElement>>(new Map());
+
+  // Load images from palette when palette changes
+  useEffect(() => {
+    if (!palette) return;
+
+    const imageMap = new Map<string, HTMLImageElement>();
+    let loadedCount = 0;
+    const totalImages = palette.spritesheets.length + palette.sprites.filter(s => s.imageData).length;
+
+    if (totalImages === 0) {
+      setPaletteImages(imageMap);
+      return;
+    }
+
+    // Load spritesheet images
+    palette.spritesheets.forEach(sheet => {
+      const img = new Image();
+      img.onload = () => {
+        imageMap.set(sheet.id, img);
+        loadedCount++;
+        if (loadedCount === totalImages) {
+          setPaletteImages(new Map(imageMap));
+          console.log(`[App] Loaded ${totalImages} palette images`);
+        }
+      };
+      img.onerror = () => {
+        console.error(`[App] Failed to load spritesheet image: ${sheet.id}`);
+        loadedCount++;
+        if (loadedCount === totalImages) {
+          setPaletteImages(new Map(imageMap));
+        }
+      };
+      img.src = sheet.imageData;
+    });
+
+    // Load individual sprite images
+    palette.sprites.forEach(sprite => {
+      if (sprite.imageData) {
+        const img = new Image();
+        img.onload = () => {
+          imageMap.set(sprite.id, img);
+          loadedCount++;
+          if (loadedCount === totalImages) {
+            setPaletteImages(new Map(imageMap));
+            console.log(`[App] Loaded ${totalImages} palette images`);
+          }
+        };
+        img.onerror = () => {
+          console.error(`[App] Failed to load sprite image: ${sprite.id}`);
+          loadedCount++;
+          if (loadedCount === totalImages) {
+            setPaletteImages(new Map(imageMap));
+          }
+        };
+        img.src = sprite.imageData;
+      }
+    });
+  }, [palette]);
+
+  const paletteToSpriteSheets = useMemo((): SpriteSheet[] => {
+    if (!palette || palette.sprites.length === 0 || paletteImages.size === 0) return [];
+
+    const sheetMap = new Map<string, SpriteSheet>();
+
+    // Create individual sprite "sheets" for each sprite
+    // Each sprite gets its own mini-sheet since they have individual imageData
+    palette.sprites.forEach(sprite => {
+      if (sprite.imageData) {
+        const img = paletteImages.get(sprite.id);
+        if (!img) return; // Skip if image not loaded yet
+        
+        const miniSheet: SpriteSheet = {
+          id: `sprite_sheet_${sprite.id}`,
+          name: `${sprite.name}_sheet`,
+          imagePath: sprite.imageData,
+          imageData: img, // Use loaded Image object
+          gridWidth: 1,
+          gridHeight: 1,
+          spriteWidth: sprite.width,
+          spriteHeight: sprite.height,
+          sprites: [{
+            id: sprite.id,
+            name: sprite.name,
+            sheetId: `sprite_sheet_${sprite.id}`,
+            x: 0,
+            y: 0,
+            width: sprite.width,
+            height: sprite.height,
+            category: ObjectCategory.Universal,
+            terrainType: mapData?.terrainType || TerrainType.Dungeon,
+          }]
+        };
+        
+        sheetMap.set(miniSheet.id, miniSheet);
+      }
+    });
+
+    return Array.from(sheetMap.values());
+  }, [palette, mapData?.terrainType, paletteImages]);
+
   // Load workspace from localStorage on mount
   useEffect(() => {
     const saved = WorkspaceManager.loadFromLocalStorage();
@@ -530,6 +649,13 @@ Paste this seed into the generator to recreate this map!`;
       const panStep = 50;
       
       switch (e.key) {
+        case 'Escape':
+          // Cancel sprite placement mode
+          if (placementMode === PlacementMode.Place) {
+            e.preventDefault();
+            handleSpriteSelect(null);
+          }
+          break;
         case '+':
         case '=':
           e.preventDefault();
@@ -565,7 +691,7 @@ Paste this seed into the generator to recreate this map!`;
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleZoomIn, handleZoomOut, handleResetView, handlePan]);
+  }, [handleZoomIn, handleZoomOut, handleResetView, handlePan, placementMode, handleSpriteSelect]);
 
   // Load spritesheets (placeholder - add real assets later)
   useEffect(() => {
@@ -690,7 +816,7 @@ Paste this seed into the generator to recreate this map!`;
                 <PalettePanel
                   palette={palette}
                   selectedSpriteId={selectedSpriteId}
-                  onSpriteSelect={setSelectedSpriteId}
+                  onSpriteSelect={handleSpriteSelect}
                   onOpenUploadDialog={() => setUploadDialogOpen(true)}
                   onCreateCategory={handleCreateCategory}
                   onDeleteCategory={handleDeleteCategory}
@@ -734,7 +860,7 @@ Paste this seed into the generator to recreate this map!`;
               showTrees={showTrees}
               showObjects={showObjectLayer}
               placedObjects={placedObjects}
-              spritesheets={spritesheets}
+              spritesheets={[...spritesheets, ...paletteToSpriteSheets]}
               placementMode={placementMode}
               selectedSpriteId={selectedSpriteId}
               onObjectPlace={handleObjectPlace}
@@ -764,6 +890,47 @@ Paste this seed into the generator to recreate this map!`;
           onClose={() => setWizardOpen(false)}
           onGenerate={handleGenerateWorkspace}
         />
+
+        {/* Sprite Placement Mode Indicator */}
+        {placementMode === PlacementMode.Place && selectedSpriteId && palette && (
+          <Box
+            sx={{
+              position: 'fixed',
+              bottom: 20,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              bgcolor: 'primary.main',
+              color: 'primary.contrastText',
+              px: 3,
+              py: 1.5,
+              borderRadius: 2,
+              boxShadow: 4,
+              zIndex: 1300,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 2,
+            }}
+          >
+            <Typography variant="body1" sx={{ fontWeight: 'medium' }}>
+              🖱️ Click on the map to place sprite
+            </Typography>
+            <Button
+              size="small"
+              variant="outlined"
+              sx={{
+                color: 'inherit',
+                borderColor: 'rgba(255,255,255,0.5)',
+                '&:hover': {
+                  borderColor: 'rgba(255,255,255,0.8)',
+                  bgcolor: 'rgba(255,255,255,0.1)',
+                }
+              }}
+              onClick={() => handleSpriteSelect(null)}
+            >
+              Cancel (ESC)
+            </Button>
+          </Box>
+        )}
       </Box>
     </ThemeProvider>
   );

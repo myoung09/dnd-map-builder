@@ -210,18 +210,29 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
   }, [mapData, cellSize, showGrid, showRooms, showCorridors, showTrees, showObjects, placedObjects, spritesheets]);
 
   // Handle canvas clicks for object placement/deletion
-  const handleCanvasClick = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
+  const handleContainerClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    // Only handle clicks when in placement mode and not dragging
+    if (placementMode === PlacementMode.None || isDragging) return;
+    
+    console.log('[MapCanvas] Container clicked!', { placementMode, selectedSpriteId, isDragging });
+    
     if (!mapData) return;
     
-    const canvas = event.currentTarget;
-    const rect = canvas.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
+    // Get the canvas-stack div
+    const stackDiv = event.currentTarget.querySelector('.canvas-stack') as HTMLElement;
+    if (!stackDiv) return;
+    
+    const rect = stackDiv.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / zoom;
+    const y = (event.clientY - rect.top) / zoom;
     const gridX = Math.floor(x / cellSize);
     const gridY = Math.floor(y / cellSize);
     
+    console.log('[MapCanvas] Click coords:', { x, y, gridX, gridY, cellSize, zoom });
+    
     // Boundary check
     if (gridX < 0 || gridX >= mapData.width || gridY < 0 || gridY >= mapData.height) {
+      console.log('[MapCanvas] Click outside bounds');
       return;
     }
     
@@ -238,7 +249,7 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
         zIndex: placedObjects.length
       };
       onObjectPlace(newObject);
-      console.log(`[MapCanvas] Placed object at (${gridX}, ${gridY})`);
+      console.log(`[MapCanvas] Placed object at (${gridX}, ${gridY})`, newObject);
     } else if (placementMode === PlacementMode.Delete && onObjectClick) {
       // Find and delete object at this position
       const clickedObject = placedObjects.find(
@@ -249,7 +260,7 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
         console.log(`[MapCanvas] Deleted object at (${gridX}, ${gridY})`);
       }
     }
-  }, [mapData, cellSize, placementMode, selectedSpriteId, placedObjects, onObjectPlace, onObjectClick]);
+  }, [mapData, cellSize, placementMode, selectedSpriteId, onObjectPlace, onObjectClick, placedObjects, isDragging, zoom]);
 
   // Mouse wheel zoom handler
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
@@ -302,36 +313,49 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
   };
 
   console.log(`[MapCanvas] Transform: zoom=${zoom}, panX=${panX}, panY=${panY}`);
+  console.log(`[MapCanvas] Object layer state:`, {
+    placementMode,
+    selectedSpriteId,
+    showObjects,
+    pointerEvents: placementMode !== PlacementMode.None ? 'auto' : 'none',
+    opacity: showObjects ? 1 : 0
+  });
 
   return (
     <div 
       className="map-canvas-container" 
       ref={containerRef}
       onWheel={handleWheel}
+      onClick={handleContainerClick}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
       style={{
-        cursor: isDragging ? 'grabbing' : 'default'
+        cursor: isDragging ? 'grabbing' : 
+                placementMode === PlacementMode.Place ? 'crosshair' :
+                placementMode === PlacementMode.Delete ? 'not-allowed' : 'default'
       }}
     >
       <div className="canvas-stack" style={transformStyle}>
         <canvas ref={backgroundCanvasRef} className="canvas-layer" />
         <canvas ref={terrainCanvasRef} className="canvas-layer" />
         <canvas 
-          ref={objectCanvasRef} 
+          ref={overlayCanvasRef} 
           className="canvas-layer"
-          onClick={handleCanvasClick}
           style={{
-            pointerEvents: placementMode !== PlacementMode.None ? 'auto' : 'none',
-            opacity: showObjects ? 1 : 0,
-            transition: 'opacity 0.2s',
-            cursor: placementMode === PlacementMode.Place ? 'crosshair' : 
-                    placementMode === PlacementMode.Delete ? 'not-allowed' : 'default'
+            pointerEvents: 'none' // Grid overlay should not intercept clicks
           }}
         />
-        <canvas ref={overlayCanvasRef} className="canvas-layer" />
+        <canvas 
+          ref={objectCanvasRef} 
+          className="canvas-layer"
+          style={{
+            pointerEvents: 'none', // Clicks handled by container
+            opacity: showObjects ? 1 : 0,
+            transition: 'opacity 0.2s',
+          }}
+        />
       </div>
       
       {/* Export controls overlay */}
