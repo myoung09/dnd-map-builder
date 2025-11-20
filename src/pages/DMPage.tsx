@@ -113,6 +113,10 @@ export const DMPage: React.FC = () => {
   );
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
+  // Light placement state
+  const [lightPlacementMode, setLightPlacementMode] = useState(false);
+  const [selectedLightType, setSelectedLightType] = useState<'torch' | 'lantern' | 'spell' | 'ambient'>('torch');
+
   // Session state
   const [sessionName, setSessionName] = useState('');
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
@@ -191,14 +195,39 @@ export const DMPage: React.FC = () => {
   }, []);
 
   const handleAddLightSource = useCallback(() => {
+    // Enable light placement mode
+    setLightPlacementMode(true);
+    console.log('[DMPage] Light placement mode enabled. Click on map to place light.');
+  }, []);
+
+  const handleMapClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (!lightPlacementMode) return;
+
+    // Get click position relative to the map canvas
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+
+    // Get light properties based on type
+    const lightProperties = {
+      torch: { radius: 100, intensity: 0.8, color: '#FFA500' },
+      lantern: { radius: 150, intensity: 0.9, color: '#FFD700' },
+      spell: { radius: 200, intensity: 1.0, color: '#00BFFF' },
+      ambient: { radius: 300, intensity: 0.5, color: '#FFFFFF' },
+    };
+
+    const props = lightProperties[selectedLightType];
+
     const newLight: LightSource = {
       id: `light_${Date.now()}`,
-      x: 40,
-      y: 40,
-      radius: 10,
-      intensity: 0.8,
-      type: 'torch',
+      x,
+      y,
+      radius: props.radius,
+      intensity: props.intensity,
+      color: props.color,
+      type: selectedLightType,
     };
+
     setLighting((prev) => {
       const updated = { ...prev, lightSources: [...prev.lightSources, newLight] };
       wsService.send({
@@ -207,7 +236,11 @@ export const DMPage: React.FC = () => {
       });
       return updated;
     });
-  }, []);
+
+    // Disable placement mode after placing
+    setLightPlacementMode(false);
+    console.log('[DMPage] Light source placed at', x, y);
+  }, [lightPlacementMode, selectedLightType]);
 
   const handleRemoveLightSource = useCallback((lightId: string) => {
     setLighting((prev) => {
@@ -315,7 +348,15 @@ export const DMPage: React.FC = () => {
       {/* Main Content */}
       <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* Map Canvas */}
-        <Box sx={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+        <Box 
+          sx={{ 
+            flex: 1, 
+            position: 'relative', 
+            overflow: 'hidden',
+            cursor: lightPlacementMode ? 'crosshair' : 'default',
+          }}
+          onClick={handleMapClick}
+        >
           <MapCanvas
             ref={canvasRef}
             mapData={mapData}
@@ -343,6 +384,25 @@ export const DMPage: React.FC = () => {
               size="small"
             />
           </Box>
+          
+          {/* Light placement indicator */}
+          {lightPlacementMode && (
+            <Box
+              sx={{
+                position: 'absolute',
+                top: 16,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 1000,
+              }}
+            >
+              <Chip
+                label={`Click to place ${selectedLightType}`}
+                color="primary"
+                size="small"
+              />
+            </Box>
+          )}
         </Box>
 
         {/* Control Panel */}
@@ -425,13 +485,30 @@ export const DMPage: React.FC = () => {
           <Typography variant="subtitle1" gutterBottom>
             Light Sources
           </Typography>
+          
+          {/* Light Type Selector */}
+          <FormControl fullWidth sx={{ mb: 2 }}>
+            <InputLabel>Light Type</InputLabel>
+            <Select
+              value={selectedLightType}
+              label="Light Type"
+              onChange={(e) => setSelectedLightType(e.target.value as any)}
+            >
+              <MenuItem value="torch">🔥 Torch (100px, warm)</MenuItem>
+              <MenuItem value="lantern">🏮 Lantern (150px, bright)</MenuItem>
+              <MenuItem value="spell">✨ Magical (200px, blue)</MenuItem>
+              <MenuItem value="ambient">💡 Ambient (300px, soft)</MenuItem>
+            </Select>
+          </FormControl>
+          
           <Button
-            variant="outlined"
+            variant={lightPlacementMode ? "contained" : "outlined"}
+            color={lightPlacementMode ? "primary" : "inherit"}
             onClick={handleAddLightSource}
             fullWidth
             sx={{ mb: 2 }}
           >
-            Add Light Source
+            {lightPlacementMode ? '🎯 Click on Map to Place' : 'Add Light Source'}
           </Button>
 
           {lighting.lightSources.map((light) => (

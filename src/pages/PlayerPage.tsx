@@ -36,6 +36,46 @@ export const PlayerPage: React.FC<PlayerPageProps> = ({ sessionId: propSessionId
   });
 
   const [visibleObjects, setVisibleObjects] = useState<DMObject[]>([]);
+  const fogCanvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Draw fog of war on canvas
+  useEffect(() => {
+    const canvas = fogCanvasRef.current;
+    if (!canvas || !lighting.fogOfWarEnabled) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Set canvas to full viewport size
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    // Fill entire canvas with black fog
+    ctx.fillStyle = 'rgba(0, 0, 0, 1)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Cut out holes for each light source using globalCompositeOperation
+    lighting.lightSources.forEach((light) => {
+      // Create radial gradient for smooth edges
+      const gradient = ctx.createRadialGradient(light.x, light.y, 0, light.x, light.y, light.radius);
+      gradient.addColorStop(0, 'rgba(0, 0, 0, 1)');
+      gradient.addColorStop(0.7, 'rgba(0, 0, 0, 0.7)');
+      gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+      // Use destination-out to erase fog
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillStyle = gradient;
+      ctx.fillRect(light.x - light.radius, light.y - light.radius, light.radius * 2, light.radius * 2);
+      
+      // Draw the circle
+      ctx.beginPath();
+      ctx.arc(light.x, light.y, light.radius, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Reset composite operation
+      ctx.globalCompositeOperation = 'source-over';
+    });
+  }, [lighting.fogOfWarEnabled, lighting.lightSources]);
 
   // Connect to WebSocket on mount
   useEffect(() => {
@@ -178,7 +218,7 @@ export const PlayerPage: React.FC<PlayerPageProps> = ({ sessionId: propSessionId
   }
 
   return (
-    <Box sx={{ height: '100vh', bgcolor: 'background.default', position: 'relative' }}>
+    <Box sx={{ height: '100vh', bgcolor: 'background.default', position: 'relative', overflow: 'hidden' }}>
       {/* Connection status */}
       <Box
         sx={{
@@ -207,33 +247,70 @@ export const PlayerPage: React.FC<PlayerPageProps> = ({ sessionId: propSessionId
         <Chip label={`Session: ${sessionId}`} size="small" variant="outlined" />
       </Box>
 
-      {/* Map Canvas - Read-only */}
-      <MapCanvas
-        ref={canvasRef}
-        mapData={mapData}
-        cellSize={20}
-        showGrid={true}
-        showRooms={true}
-        showCorridors={true}
-        showTrees={true}
-        showObjects={true}
-        placedObjects={[]}
-        spritesheets={[]}
-      />
-
-      {/* Lighting overlay (if fog of war is enabled) */}
-      {lighting.fogOfWarEnabled && (
-        <Box
-          sx={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            pointerEvents: 'none',
-            background: 'radial-gradient(circle, transparent 20%, rgba(0,0,0,0.8) 80%)',
-          }}
+      {/* Map Canvas Container - Centered */}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '100%',
+          height: '100%',
+          position: 'relative',
+        }}
+      >
+        <MapCanvas
+          ref={canvasRef}
+          mapData={mapData}
+          cellSize={20}
+          showGrid={true}
+          showRooms={true}
+          showCorridors={true}
+          showTrees={true}
+          showObjects={true}
+          placedObjects={[]}
+          spritesheets={[]}
         />
+      </Box>
+
+      {/* Fog of War Canvas Overlay */}
+      {lighting.fogOfWarEnabled && (
+        <>
+          <canvas
+            ref={fogCanvasRef}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              pointerEvents: 'none',
+              zIndex: 100,
+            }}
+          />
+          
+          {/* Colored glow layer for atmosphere */}
+          {lighting.lightSources.map((light) => (
+            <Box
+              key={`glow-${light.id}`}
+              sx={{
+                position: 'absolute',
+                left: `${light.x}px`,
+                top: `${light.y}px`,
+                width: `${light.radius * 2.2}px`,
+                height: `${light.radius * 2.2}px`,
+                transform: 'translate(-50%, -50%)',
+                borderRadius: '50%',
+                background: `radial-gradient(circle, 
+                  ${light.color || '#FFA500'}44 0%, 
+                  ${light.color || '#FFA500'}22 40%,
+                  transparent 70%)`,
+                pointerEvents: 'none',
+                filter: `blur(${light.radius * 0.2}px)`,
+                zIndex: 101,
+              }}
+            />
+          ))}
+        </>
       )}
 
       {/* Object count indicator */}
