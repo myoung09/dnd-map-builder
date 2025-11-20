@@ -1,0 +1,524 @@
+// DM Route - Dungeon Master control interface
+
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  Box,
+  Paper,
+  Tabs,
+  Tab,
+  Typography,
+  Slider,
+  Switch,
+  FormControlLabel,
+  Button,
+  TextField,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  IconButton,
+  Divider,
+  Alert,
+  Chip,
+} from '@mui/material';
+import {
+  WbSunny as BrightnessIcon,
+  Contrast as ContrastIcon,
+  Visibility as VisibilityIcon,
+  VisibilityOff as VisibilityOffIcon,
+  Save as SaveIcon,
+  Refresh as SyncIcon,
+  Delete as DeleteIcon,
+} from '@mui/icons-material';
+import { MapCanvas, MapCanvasRef } from '../components/MapCanvas';
+import { wsService } from '../services/websocket';
+import {
+  LightingState,
+  LightSource,
+  DMObject,
+  DMSessionState,
+  WSEventType,
+} from '../types/dm';
+import { MapData, TerrainType } from '../types/generator';
+import { PlacedObject } from '../types/objects';
+
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
+}
+
+function TabPanel(props: TabPanelProps) {
+  const { children, value, index, ...other } = props;
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`dm-tabpanel-${index}`}
+      aria-labelledby={`dm-tab-${index}`}
+      {...other}
+    >
+      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
+    </div>
+  );
+}
+
+export const DMPage: React.FC = () => {
+  const [tabValue, setTabValue] = useState(0);
+  const [sessionId] = useState(`session_${Date.now()}`);
+  const [connected, setConnected] = useState(false);
+  const [mapData, setMapData] = useState<MapData | null>(null);
+  const canvasRef = useRef<MapCanvasRef>(null);
+
+  // Lighting state
+  const [lighting, setLighting] = useState<LightingState>({
+    brightness: 1,
+    contrast: 1,
+    fogOfWarEnabled: false,
+    lightSources: [],
+  });
+
+  // Objects state
+  const [dmObjects, setDmObjects] = useState<DMObject[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+
+  // Session state
+  const [sessionName, setSessionName] = useState('');
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+
+  // Connect to WebSocket on mount
+  useEffect(() => {
+    wsService
+      .connect(sessionId, 'dm')
+      .then(() => {
+        setConnected(true);
+        console.log('[DMPage] Connected to session:', sessionId);
+      })
+      .catch((error) => {
+        console.error('[DMPage] Connection failed:', error);
+      });
+
+    return () => {
+      wsService.disconnect();
+    };
+  }, [sessionId]);
+
+  // Handle lighting changes
+  const handleBrightnessChange = useCallback((value: number) => {
+    setLighting((prev) => {
+      const updated = { ...prev, brightness: value };
+      // Broadcast lighting update
+      wsService.send({
+        type: WSEventType.LIGHTING_UPDATE,
+        payload: updated,
+      });
+      return updated;
+    });
+  }, []);
+
+  const handleContrastChange = useCallback((value: number) => {
+    setLighting((prev) => {
+      const updated = { ...prev, contrast: value };
+      wsService.send({
+        type: WSEventType.LIGHTING_UPDATE,
+        payload: updated,
+      });
+      return updated;
+    });
+  }, []);
+
+  const handleFogOfWarToggle = useCallback(() => {
+    setLighting((prev) => {
+      const updated = { ...prev, fogOfWarEnabled: !prev.fogOfWarEnabled };
+      wsService.send({
+        type: WSEventType.LIGHTING_UPDATE,
+        payload: updated,
+      });
+      return updated;
+    });
+  }, []);
+
+  const handleAddLightSource = useCallback(() => {
+    const newLight: LightSource = {
+      id: `light_${Date.now()}`,
+      x: 40,
+      y: 40,
+      radius: 10,
+      intensity: 0.8,
+      type: 'torch',
+    };
+    setLighting((prev) => {
+      const updated = { ...prev, lightSources: [...prev.lightSources, newLight] };
+      wsService.send({
+        type: WSEventType.LIGHTING_UPDATE,
+        payload: updated,
+      });
+      return updated;
+    });
+  }, []);
+
+  const handleRemoveLightSource = useCallback((lightId: string) => {
+    setLighting((prev) => {
+      const updated = {
+        ...prev,
+        lightSources: prev.lightSources.filter((l) => l.id !== lightId),
+      };
+      wsService.send({
+        type: WSEventType.LIGHTING_UPDATE,
+        payload: updated,
+      });
+      return updated;
+    });
+  }, []);
+
+  // Handle object visibility toggle
+  const handleToggleObjectVisibility = useCallback((objectId: string) => {
+    setDmObjects((prev) => {
+      const updated = prev.map((obj) =>
+        obj.id === objectId ? { ...obj, visibleToPlayers: !obj.visibleToPlayers } : obj
+      );
+      const updatedObj = updated.find((o) => o.id === objectId);
+      if (updatedObj) {
+        wsService.send({
+          type: WSEventType.OBJECT_UPDATED,
+          payload: updatedObj,
+        });
+      }
+      return updated;
+    });
+  }, []);
+
+  // Handle sync now
+  const handleSyncNow = useCallback(() => {
+    const sessionState: DMSessionState = {
+      sessionId,
+      workspaceId: 'workspace_1',
+      mapId: 'map_1',
+      lighting,
+      objects: dmObjects,
+      revealedAreas: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    wsService.send({
+      type: WSEventType.SYNC_NOW,
+      payload: { sessionState },
+    });
+
+    console.log('[DMPage] Synced session state');
+  }, [sessionId, lighting, dmObjects]);
+
+  // Handle session save
+  const handleSaveSession = useCallback(() => {
+    const sessionState: DMSessionState = {
+      sessionId,
+      workspaceId: 'workspace_1',
+      mapId: 'map_1',
+      lighting,
+      objects: dmObjects,
+      revealedAreas: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    wsService.send({
+      type: WSEventType.SESSION_SAVE,
+      payload: {
+        workspaceId: 'workspace_1',
+        sessionData: sessionState,
+      },
+    });
+
+    setLastSaved(new Date());
+    console.log('[DMPage] Session saved');
+  }, [sessionId, lighting, dmObjects]);
+
+  return (
+    <Box sx={{ display: 'flex', height: '100vh', bgcolor: 'background.default' }}>
+      {/* Map Canvas */}
+      <Box sx={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+        <MapCanvas
+          ref={canvasRef}
+          mapData={mapData}
+          cellSize={20}
+          showGrid={true}
+          showRooms={true}
+          showCorridors={true}
+          showTrees={true}
+          showObjects={true}
+          placedObjects={[]}
+          spritesheets={[]}
+        />
+        {/* Connection status */}
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 16,
+            left: 16,
+            zIndex: 1000,
+          }}
+        >
+          <Chip
+            label={connected ? 'Connected' : 'Disconnected'}
+            color={connected ? 'success' : 'error'}
+            size="small"
+          />
+        </Box>
+      </Box>
+
+      {/* Control Panel */}
+      <Paper
+        sx={{
+          width: 400,
+          height: '100%',
+          overflow: 'auto',
+          borderLeft: 1,
+          borderColor: 'divider',
+        }}
+      >
+        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+          <Tabs value={tabValue} onChange={(_, v) => setTabValue(v)} variant="fullWidth">
+            <Tab label="Lighting" />
+            <Tab label="Objects" />
+            <Tab label="Sync" />
+          </Tabs>
+        </Box>
+
+        {/* Lighting Tab */}
+        <TabPanel value={tabValue} index={0}>
+          <Typography variant="h6" gutterBottom>
+            Lighting Controls
+          </Typography>
+
+          {/* Brightness */}
+          <Box sx={{ mb: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+              <BrightnessIcon sx={{ mr: 1 }} />
+              <Typography>Brightness: {lighting.brightness.toFixed(2)}</Typography>
+            </Box>
+            <Slider
+              value={lighting.brightness}
+              onChange={(_, value) => handleBrightnessChange(value as number)}
+              min={0}
+              max={2}
+              step={0.1}
+              marks={[
+                { value: 0, label: 'Dark' },
+                { value: 1, label: 'Normal' },
+                { value: 2, label: 'Bright' },
+              ]}
+            />
+          </Box>
+
+          {/* Contrast */}
+          <Box sx={{ mb: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+              <ContrastIcon sx={{ mr: 1 }} />
+              <Typography>Contrast: {lighting.contrast.toFixed(2)}</Typography>
+            </Box>
+            <Slider
+              value={lighting.contrast}
+              onChange={(_, value) => handleContrastChange(value as number)}
+              min={0}
+              max={2}
+              step={0.1}
+              marks={[
+                { value: 0, label: 'Low' },
+                { value: 1, label: 'Normal' },
+                { value: 2, label: 'High' },
+              ]}
+            />
+          </Box>
+
+          {/* Fog of War */}
+          <Box sx={{ mb: 3 }}>
+            <FormControlLabel
+              control={
+                <Switch checked={lighting.fogOfWarEnabled} onChange={handleFogOfWarToggle} />
+              }
+              label="Fog of War"
+            />
+          </Box>
+
+          <Divider sx={{ my: 2 }} />
+
+          {/* Light Sources */}
+          <Typography variant="subtitle1" gutterBottom>
+            Light Sources
+          </Typography>
+          <Button
+            variant="outlined"
+            onClick={handleAddLightSource}
+            fullWidth
+            sx={{ mb: 2 }}
+          >
+            Add Light Source
+          </Button>
+
+          {lighting.lightSources.map((light) => (
+            <Paper key={light.id} sx={{ p: 2, mb: 2, bgcolor: 'action.hover' }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                <Typography variant="body2">{light.type}</Typography>
+                <IconButton size="small" onClick={() => handleRemoveLightSource(light.id)}>
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </Box>
+              <Typography variant="caption">
+                Position: ({light.x}, {light.y}) | Radius: {light.radius}
+              </Typography>
+            </Paper>
+          ))}
+        </TabPanel>
+
+        {/* Objects Tab */}
+        <TabPanel value={tabValue} index={1}>
+          <Typography variant="h6" gutterBottom>
+            Object Management
+          </Typography>
+
+          {/* Category Filter */}
+          <FormControl fullWidth sx={{ mb: 3 }}>
+            <InputLabel>Category</InputLabel>
+            <Select
+              value={selectedCategory}
+              label="Category"
+              onChange={(e) => setSelectedCategory(e.target.value)}
+            >
+              <MenuItem value="all">All</MenuItem>
+              <MenuItem value="monster">Monsters</MenuItem>
+              <MenuItem value="trap">Traps</MenuItem>
+              <MenuItem value="npc">NPCs</MenuItem>
+              <MenuItem value="treasure">Treasure</MenuItem>
+              <MenuItem value="environment">Environment</MenuItem>
+            </Select>
+          </FormControl>
+
+          {/* Quick Actions */}
+          <Typography variant="subtitle2" gutterBottom>
+            Quick Add
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 3 }}>
+            <Button size="small" variant="outlined">
+              Goblin
+            </Button>
+            <Button size="small" variant="outlined">
+              Dragon
+            </Button>
+            <Button size="small" variant="outlined">
+              Trap
+            </Button>
+            <Button size="small" variant="outlined">
+              Chest
+            </Button>
+          </Box>
+
+          <Divider sx={{ my: 2 }} />
+
+          {/* Objects List */}
+          <Typography variant="subtitle2" gutterBottom>
+            Placed Objects ({dmObjects.length})
+          </Typography>
+          {dmObjects
+            .filter((obj) => selectedCategory === 'all' || obj.category === selectedCategory)
+            .map((obj) => (
+              <Paper key={obj.id} sx={{ p: 2, mb: 2, bgcolor: 'action.hover' }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Box>
+                    <Typography variant="body2">{obj.name || obj.category}</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      ({obj.x}, {obj.y})
+                    </Typography>
+                  </Box>
+                  <IconButton
+                    size="small"
+                    onClick={() => handleToggleObjectVisibility(obj.id)}
+                    color={obj.visibleToPlayers ? 'primary' : 'default'}
+                  >
+                    {obj.visibleToPlayers ? <VisibilityIcon /> : <VisibilityOffIcon />}
+                  </IconButton>
+                </Box>
+              </Paper>
+            ))}
+        </TabPanel>
+
+        {/* Sync Tab */}
+        <TabPanel value={tabValue} index={2}>
+          <Typography variant="h6" gutterBottom>
+            Session Management
+          </Typography>
+
+          {/* Session Info */}
+          <Paper sx={{ p: 2, mb: 3, bgcolor: 'action.hover' }}>
+            <Typography variant="subtitle2">Session ID</Typography>
+            <Typography variant="body2" sx={{ fontFamily: 'monospace', mb: 2 }}>
+              {sessionId}
+            </Typography>
+            {lastSaved && (
+              <Typography variant="caption" color="text.secondary">
+                Last saved: {lastSaved.toLocaleTimeString()}
+              </Typography>
+            )}
+          </Paper>
+
+          {/* Session Name */}
+          <TextField
+            fullWidth
+            label="Session Name"
+            value={sessionName}
+            onChange={(e) => setSessionName(e.target.value)}
+            sx={{ mb: 3 }}
+          />
+
+          {/* Actions */}
+          <Button
+            fullWidth
+            variant="contained"
+            startIcon={<SyncIcon />}
+            onClick={handleSyncNow}
+            sx={{ mb: 2 }}
+          >
+            Sync Now
+          </Button>
+
+          <Button
+            fullWidth
+            variant="outlined"
+            startIcon={<SaveIcon />}
+            onClick={handleSaveSession}
+            sx={{ mb: 2 }}
+          >
+            Save Session
+          </Button>
+
+          <Divider sx={{ my: 3 }} />
+
+          {/* Stats */}
+          <Typography variant="subtitle2" gutterBottom>
+            Session Stats
+          </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Typography variant="body2">
+              Objects: {dmObjects.length}
+            </Typography>
+            <Typography variant="body2">
+              Visible Objects: {dmObjects.filter((o) => o.visibleToPlayers).length}
+            </Typography>
+            <Typography variant="body2">
+              Light Sources: {lighting.lightSources.length}
+            </Typography>
+            <Typography variant="body2">
+              Fog of War: {lighting.fogOfWarEnabled ? 'Enabled' : 'Disabled'}
+            </Typography>
+          </Box>
+
+          {!connected && (
+            <Alert severity="warning" sx={{ mt: 3 }}>
+              Not connected to session. Changes will not be synchronized.
+            </Alert>
+          )}
+        </TabPanel>
+      </Paper>
+    </Box>
+  );
+};
