@@ -5,7 +5,7 @@ const WebSocket = require('ws');
 const http = require('http');
 const url = require('url');
 
-const PORT = process.env.WS_PORT || 3001;
+const PORT = process.env.WS_PORT || 7000;
 
 // Store sessions and their connected clients
 const sessions = new Map();
