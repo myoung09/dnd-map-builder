@@ -2,6 +2,10 @@
 
 This guide covers the deployment of the DnD Map Builder application to a Hostinger VPS.
 
+## Quick Start
+
+For initial VPS setup, see the [VPS Setup Checklist](./VPS_SETUP.md) for a step-by-step guide.
+
 ## Architecture Overview
 
 The application consists of two main components:
