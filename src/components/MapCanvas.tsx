@@ -116,20 +116,20 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
     }
   }));
 
-  // Memoize export handlers to avoid recreation on every render
-  // const handleExportPNG = useMemo(() => () => {
+  // Export handlers removed - previously used useMemo but now commented out
+  // const handleExportPNG = () => {
   //   if (!mapData || !terrainCanvasRef.current) return;
   //   const dataUrl = terrainCanvasRef.current.toDataURL('image/png');
   //   const link = document.createElement('a');
   //   link.download = `map-${mapData.terrainType}-${mapData.seed || 'unknown'}.png`;
   //   link.href = dataUrl;
   //   link.click();
-  // }, [mapData]);
+  // };
 
-  // const handleExportJSON = useMemo(() => () => {
+  // const handleExportJSON = () => {
   //   if (!mapData) return;
   //   ExportUtils.exportMapToJSON(mapData, `map-${mapData.terrainType}-${mapData.seed || 'unknown'}.json`);
-  // }, [mapData]);
+  // };
 
   useEffect(() => {
     if (!mapData) return;

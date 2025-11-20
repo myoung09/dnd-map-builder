@@ -13,8 +13,8 @@ module.exports = {
         NODE_ENV: 'production',
         WS_PORT: 3001
       },
-      error_file: './logs/websocket-error.log',
-      out_file: './logs/websocket-out.log',
+      error_file: '/var/www/dnd-map-builder/logs/websocket-error.log',
+      out_file: '/var/www/dnd-map-builder/logs/websocket-out.log',
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       merge_logs: true,
       autorestart: true,
