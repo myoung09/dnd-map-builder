@@ -4,7 +4,7 @@ import './App.css';
 import { TerrainType, GeneratorParameters, MapData } from './types/generator';
 import { PlacedObject, PlacementMode, SpriteSheet, ObjectCategory } from './types/objects';
 import { Workspace } from './types/workspace';
-import { Palette, Sprite, SpriteCategory, PlacedSprite, DEFAULT_CATEGORIES } from './types/palette';
+import { Palette, SpriteCategory, DEFAULT_CATEGORIES } from './types/palette';
 import { MapCanvas, MapCanvasRef } from './components/MapCanvas';
 import ObjectPalette from './components/ObjectPalette';
 import { TopMenuBar } from './components/TopMenuBar';
@@ -18,7 +18,6 @@ import { ForestGenerator } from './generators/ForestGenerator';
 import { CaveGenerator } from './generators/CaveGenerator';
 import { DungeonGenerator } from './generators/DungeonGenerator';
 import { getPresetByName, getPresetsByTerrain } from './utils/presets';
-import { ExportUtils } from './utils/export';
 import { WorkspaceManager } from './utils/workspaceManager';
 import { ParsedCampaignData } from './utils/campaignParser';
 import { sliceSpritesheet } from './utils/spriteUtils';
@@ -86,7 +85,7 @@ function App() {
   
   // Sprite palette state
   const [palette, setPalette] = useState<Palette | null>(null);
-  const [placedSprites, setPlacedSprites] = useState<PlacedSprite[]>([]);
+  // const [placedSprites, setPlacedSprites] = useState<PlacedSprite[]>([]);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   
   const canvasRef = useRef<MapCanvasRef>(null);
@@ -161,60 +160,60 @@ function App() {
     }
   };
 
-  const handleExportJSON = () => {
-    if (mapData) {
-      ExportUtils.exportMapToJSON(mapData, `map-${terrain}-${mapData.seed}.json`);
-    }
-  };
+  // const handleExportJSON = () => {
+  //   if (mapData) {
+  //     ExportUtils.exportMapToJSON(mapData, `map-${terrain}-${mapData.seed}.json`);
+  //   }
+  // };
 
-  const handleExportSVG = () => {
-    if (mapData) {
-      ExportUtils.exportMapToSVG(mapData, cellSize, `map-${terrain}-${mapData.seed}.svg`);
-    }
-  };
+  // const handleExportSVG = () => {
+  //   if (mapData) {
+  //     ExportUtils.exportMapToSVG(mapData, cellSize, `map-${terrain}-${mapData.seed}.svg`);
+  //   }
+  // };
 
-  const handleImportJSON = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      try {
-        const imported = await ExportUtils.importMapFromJSON(file);
-        setMapData(imported);
-        if (imported.terrainType) {
-          setTerrain(imported.terrainType);
-        }
-        if (imported.seed) {
-          setParameters({
-            ...parameters,
-            seed: imported.seed,
-            width: imported.width,
-            height: imported.height
-          });
-        }
-      } catch (error) {
-        alert('Failed to import map: ' + (error as Error).message);
-      }
-    }
-  };
+  // const handleImportJSON = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  //   const file = event.target.files?.[0];
+  //   if (file) {
+  //     try {
+  //       const imported = await ExportUtils.importMapFromJSON(file);
+  //       setMapData(imported);
+  //       if (imported.terrainType) {
+  //         setTerrain(imported.terrainType);
+  //       }
+  //       if (imported.seed) {
+  //         setParameters({
+  //           ...parameters,
+  //           seed: imported.seed,
+  //           width: imported.width,
+  //           height: imported.height
+  //         });
+  //       }
+  //     } catch (error) {
+  //       alert('Failed to import map: ' + (error as Error).message);
+  //     }
+  //   }
+  // };
 
-  const handleCopyToClipboard = () => {
-    if (!mapData) return;
-    
-    // Create shareable text with seed and parameters
-    const shareText = `DnD Map Generator - ${mapData.terrainType}
-Seed: ${mapData.seed}
-Dimensions: ${mapData.width}x${mapData.height}
-Parameters: ${JSON.stringify(parameters, null, 2)}
-
-Paste this seed into the generator to recreate this map!`;
-    
-    navigator.clipboard.writeText(shareText)
-      .then(() => {
-        alert('Map parameters copied to clipboard!');
-      })
-      .catch(() => {
-        alert('Failed to copy to clipboard');
-      });
-  };
+  // const handleCopyToClipboard = () => {
+  //   if (!mapData) return;
+  //   
+  //   // Create shareable text with seed and parameters
+  //   const shareText = `DnD Map Generator - ${mapData.terrainType}
+  // Seed: ${mapData.seed}
+  // Dimensions: ${mapData.width}x${mapData.height}
+  // Parameters: ${JSON.stringify(parameters, null, 2)}
+  // 
+  // Paste this seed into the generator to recreate this map!`;
+  //   
+  //   navigator.clipboard.writeText(shareText)
+  //     .then(() => {
+  //       alert('Map parameters copied to clipboard!');
+  //     })
+  //     .catch(() => {
+  //       alert('Failed to copy to clipboard');
+  //     });
+  // };
 
   // Object placement handlers
   const handleObjectPlace = useCallback((obj: PlacedObject) => {
@@ -526,10 +525,10 @@ Paste this seed into the generator to recreate this map!`;
     });
   }, []);
 
-  const handleViewPalette = useCallback(() => {
-    setDrawerOpen(true);
-    setActiveTab(2);
-  }, []);
+  // const handleViewPalette = useCallback(() => {
+  //   setDrawerOpen(true);
+  //   setActiveTab(2);
+  // }, []);
 
   // Handle sprite selection from palette - enable placement mode
   const handleSpriteSelect = useCallback((spriteId: string | null) => {
