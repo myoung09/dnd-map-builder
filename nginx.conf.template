@@ -3,7 +3,7 @@
 # Then create a symlink: sudo ln -s /etc/nginx/sites-available/dnd-map-builder /etc/nginx/sites-enabled/
 
 server {
-    listen 80;
+    listen 6000;
     server_name _;  # Replace with your actual domain or IP address
 
     # Serve static React build files
@@ -17,7 +17,7 @@ server {
 
     # WebSocket proxy for real-time DM/Player communication
     location /ws {
-        proxy_pass http://localhost:3001;
+        proxy_pass http://localhost:7000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";

@@ -95,7 +95,7 @@ Add the following configuration:
 
 ```nginx
 server {
-    listen 80;
+    listen 6000;
     server_name your-domain.com;  # Replace with your actual domain or IP
 
     # Serve static React build files
@@ -109,7 +109,7 @@ server {
 
     # WebSocket proxy
     location /ws {
-        proxy_pass http://localhost:3001;
+        proxy_pass http://localhost:7000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -221,7 +221,7 @@ pm2 restart ecosystem.config.cjs --env production
 The WebSocket server uses the following environment variables (configured in `ecosystem.config.cjs`):
 
 - `NODE_ENV`: Set to `production` for production deployment
-- `WS_PORT`: WebSocket server port (default: 3001)
+- `WS_PORT`: WebSocket server port (default: 7000)
 
 ## Troubleshooting
 
@@ -245,13 +245,13 @@ npm run build
 
 2. Test WebSocket connectivity:
    ```bash
-   curl http://localhost:3001
+   curl http://localhost:7000
    ```
 
 3. Check firewall rules:
    ```bash
    sudo ufw status
-   # Ensure port 3001 is open or Nginx is properly proxying
+   # Ensure port 7000 is open or Nginx is properly proxying
    ```
 
 ### Permission Issues

@@ -78,7 +78,7 @@ npm run build
 ### 11. Test WebSocket Server
 ```bash
 node server/websocket-server.js
-# Should show: [WebSocket] Server running on port 3001
+# Should show: [WebSocket] Server running on port 7000
 # Press Ctrl+C to stop
 ```
 
@@ -110,7 +110,8 @@ systemctl reload nginx
 
 ### 14. Configure Firewall (if using UFW)
 ```bash
-ufw allow 'Nginx Full'
+ufw allow 6000/tcp
+ufw allow 7000/tcp
 ufw allow 'OpenSSH'
 ufw enable
 ufw status
@@ -119,14 +120,14 @@ ufw status
 ### 15. Test the Application
 ```bash
 # Test web server
-curl http://localhost
+curl http://localhost:6000
 
 # Test WebSocket server
-curl http://localhost:3001
+curl http://localhost:7000
 # Should return: WebSocket Server Running
 
 # Test from external
-curl http://31.97.129.97
+curl http://31.97.129.97:6000
 ```
 
 ## Optional: SSL/TLS with Let's Encrypt

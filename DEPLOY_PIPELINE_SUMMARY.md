@@ -27,11 +27,11 @@ Successfully set up a complete deployment pipeline for the DND Map Builder appli
   - Configured for production environment
   - Absolute log paths: `/var/www/dnd-map-builder/logs/`
   - Auto-restart enabled with 10 max restarts
-  - WebSocket server on port 3001
+  - WebSocket server on port 7000
 
 - **Nginx Configuration** (`nginx.conf.template`):
   - Serves React build files
-  - Proxies WebSocket connections to port 3001
+  - Proxies WebSocket connections to port 7000
   - Includes caching for static assets
   - Gzip compression enabled
   - Security headers configured
@@ -115,12 +115,12 @@ Once setup is complete, deployment is automatic:
 ### Frontend
 - **Framework**: React with Create React App
 - **Build Output**: Static files in `/build` directory
-- **Served By**: Nginx on port 80 (or 443 for HTTPS)
+- **Served By**: Nginx on port 6000
 - **Features**: Grid-based map builder, terrain generators, object placement
 
 ### Backend
 - **Server**: Node.js WebSocket server
-- **Port**: 3001
+- **Port**: 7000
 - **Purpose**: Real-time DM/Player synchronization
 - **Process Manager**: PM2
 - **Features**: Session management, message broadcasting, auto-reconnect

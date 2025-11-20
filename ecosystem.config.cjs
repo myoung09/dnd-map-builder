@@ -7,11 +7,11 @@ module.exports = {
       exec_mode: 'fork',
       env: {
         NODE_ENV: 'development',
-        WS_PORT: 3001
+        WS_PORT: 7000
       },
       env_production: {
         NODE_ENV: 'production',
-        WS_PORT: 3001
+        WS_PORT: 7000
       },
       error_file: '/var/www/dnd-map-builder/logs/websocket-error.log',
       out_file: '/var/www/dnd-map-builder/logs/websocket-out.log',
