@@ -1,0 +1,28 @@
+name: Deploy to VPS
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Deploy to VPS via SSH
+        shell: bash
+        run: |
+          ssh -i ~/.ssh/id_ed25519_vps_v2 -o StrictHostKeyChecking=no root@31.97.129.97 '
+            cd /var/www/dnd-map-builder &&
+            git pull origin master &&
+            npm install &&
+            npm run build &&
+            pm2 restart ecosystem.config.cjs --env production || pm2 start ecosystem.config.cjs --env production &&
+            pm2 save
+          '

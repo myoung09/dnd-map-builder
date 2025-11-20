@@ -1,6 +1,6 @@
 // Player Route - Read-only player view with DM-controlled visibility
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Box, Chip, Alert, CircularProgress, Typography } from '@mui/material';
 import { MapCanvas, MapCanvasRef } from '../components/MapCanvas';
 import { wsService } from '../services/websocket';

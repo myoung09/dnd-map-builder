@@ -40,7 +40,7 @@ import {
   DMSessionState,
   WSEventType,
 } from '../types/dm';
-import { MapData, TerrainType } from '../types/generator';
+import { MapData } from '../types/generator';
 import { PlacedObject } from '../types/objects';
 
 interface TabPanelProps {
@@ -82,7 +82,7 @@ export const DMPage: React.FC = () => {
   const [sessionId] = useState(passedState?.sessionId || `session_${Date.now()}`);
   const [connected, setConnected] = useState(false);
   const [mapData] = useState<MapData | null>(passedState?.mapData || null);
-  const [placedObjects, setPlacedObjects] = useState<PlacedObject[]>(
+  const [placedObjects] = useState<PlacedObject[]>(
     passedState?.placedObjects || []
   );
   const canvasRef = useRef<MapCanvasRef>(null);

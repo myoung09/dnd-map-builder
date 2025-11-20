@@ -1,9 +1,8 @@
 // MapCanvas Component with layered rendering, organic edge roughening, and export controls
 // Optimized with React.memo and useMemo for performance
 
-import React, { useRef, useEffect, forwardRef, useImperativeHandle, useState, useMemo, useCallback } from 'react';
+import React, { useRef, useEffect, forwardRef, useImperativeHandle, useState, useCallback } from 'react';
 import { MapData, TerrainType } from '../types/generator';
-import { ExportUtils } from '../utils/export';
 import { PerlinNoise } from '../utils/noise';
 import { PlacedObject, PlacementMode, SpriteSheet } from '../types/objects';
 import { getSpriteById, renderSprite } from '../utils/spritesheet';
@@ -117,20 +116,20 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
     }
   }));
 
-  // Memoize export handlers to avoid recreation on every render
-  const handleExportPNG = useMemo(() => () => {
-    if (!mapData || !terrainCanvasRef.current) return;
-    const dataUrl = terrainCanvasRef.current.toDataURL('image/png');
-    const link = document.createElement('a');
-    link.download = `map-${mapData.terrainType}-${mapData.seed || 'unknown'}.png`;
-    link.href = dataUrl;
-    link.click();
-  }, [mapData]);
+  // Export handlers removed - previously used useMemo but now commented out
+  // const handleExportPNG = () => {
+  //   if (!mapData || !terrainCanvasRef.current) return;
+  //   const dataUrl = terrainCanvasRef.current.toDataURL('image/png');
+  //   const link = document.createElement('a');
+  //   link.download = `map-${mapData.terrainType}-${mapData.seed || 'unknown'}.png`;
+  //   link.href = dataUrl;
+  //   link.click();
+  // };
 
-  const handleExportJSON = useMemo(() => () => {
-    if (!mapData) return;
-    ExportUtils.exportMapToJSON(mapData, `map-${mapData.terrainType}-${mapData.seed || 'unknown'}.json`);
-  }, [mapData]);
+  // const handleExportJSON = () => {
+  //   if (!mapData) return;
+  //   ExportUtils.exportMapToJSON(mapData, `map-${mapData.terrainType}-${mapData.seed || 'unknown'}.json`);
+  // };
 
   useEffect(() => {
     if (!mapData) return;
