@@ -34,6 +34,7 @@ interface MapCanvasProps {
 export interface MapCanvasRef {
   exportToPNG: () => string;
   resetView: () => void;
+  getCanvas: () => HTMLCanvasElement | null;
 }
 
 // Terrain color palette - distinct colors for each element type
@@ -110,6 +111,9 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
     resetView: () => {
       // This will be called from parent to reset pan/zoom
       // Parent component manages the actual state
+    },
+    getCanvas: () => {
+      return terrainCanvasRef.current;
     }
   }));
 

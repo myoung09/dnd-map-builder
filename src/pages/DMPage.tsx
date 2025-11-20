@@ -201,12 +201,21 @@ export const DMPage: React.FC = () => {
   }, []);
 
   const handleMapClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    if (!lightPlacementMode) return;
+    if (!lightPlacementMode || !canvasRef.current) return;
 
-    // Get click position relative to the map canvas
-    const rect = event.currentTarget.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
+    // Get the actual canvas element
+    const canvasElement = canvasRef.current.getCanvas?.();
+    if (!canvasElement) {
+      console.warn('[DMPage] Canvas element not found');
+      return;
+    }
+
+    // Get click position relative to the actual canvas element
+    const canvasRect = canvasElement.getBoundingClientRect();
+    const x = event.clientX - canvasRect.left;
+    const y = event.clientY - canvasRect.top;
+
+    console.log('[DMPage] Click position relative to canvas:', x, y);
 
     // Get light properties based on type
     const lightProperties = {
@@ -347,28 +356,59 @@ export const DMPage: React.FC = () => {
 
       {/* Main Content */}
       <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* Map Canvas */}
+        {/* Map Canvas - Centered */}
         <Box 
           sx={{ 
             flex: 1, 
             position: 'relative', 
             overflow: 'hidden',
-            cursor: lightPlacementMode ? 'crosshair' : 'default',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
           }}
-          onClick={handleMapClick}
         >
-          <MapCanvas
-            ref={canvasRef}
-            mapData={mapData}
-            cellSize={20}
-            showGrid={true}
-            showRooms={true}
-            showCorridors={true}
-            showTrees={true}
-            showObjects={true}
-            placedObjects={[]}
-            spritesheets={[]}
-          />
+          {/* Canvas wrapper for click handling and light positioning */}
+          <Box
+            sx={{
+              position: 'relative',
+              cursor: lightPlacementMode ? 'crosshair' : 'default',
+            }}
+            onClick={handleMapClick}
+          >
+            <MapCanvas
+              ref={canvasRef}
+              mapData={mapData}
+              cellSize={20}
+              showGrid={true}
+              showRooms={true}
+              showCorridors={true}
+              showTrees={true}
+              showObjects={true}
+              placedObjects={[]}
+              spritesheets={[]}
+            />
+            
+            {/* Light source indicators on DM map */}
+            {lighting.lightSources.map((light) => (
+              <Box
+                key={`indicator-${light.id}`}
+                sx={{
+                  position: 'absolute',
+                  left: `${light.x}px`,
+                  top: `${light.y}px`,
+                  width: `${light.radius * 2}px`,
+                  height: `${light.radius * 2}px`,
+                  transform: 'translate(-50%, -50%)',
+                  borderRadius: '50%',
+                  border: `2px dashed ${light.color || '#FFA500'}`,
+                  backgroundColor: `${light.color || '#FFA500'}22`,
+                  pointerEvents: 'none',
+                  zIndex: 50,
+                }}
+              />
+            ))}
+          </Box>
+          
           {/* Connection status */}
           <Box
             sx={{
