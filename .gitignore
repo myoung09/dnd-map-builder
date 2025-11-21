@@ -22,6 +22,10 @@
 .env.test.local
 .env.production.local
 
+# deployment
+deploy.config.ps1
+deploy_temp/
+
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
