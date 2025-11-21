@@ -235,6 +235,13 @@ function App() {
     console.log('[App] Deleted object:', objId);
   }, []);
 
+  const handleObjectMove = useCallback((objId: string, newX: number, newY: number) => {
+    setPlacedObjects(prev => prev.map(obj =>
+      obj.id === objId ? { ...obj, gridX: newX, gridY: newY } : obj
+    ));
+    console.log('[App] Moved object:', objId, 'to', newX, newY);
+  }, []);
+
   const handleTogglePalette = useCallback(() => {
     setShowPalette(prev => !prev);
   }, []);
@@ -926,10 +933,12 @@ function App() {
               showObjects={showObjectLayer}
               placedObjects={placedObjects}
               spritesheets={[...spritesheets, ...paletteToSpriteSheets]}
+              palette={palette}
               placementMode={placementMode}
               selectedSpriteId={selectedSpriteId}
               onObjectPlace={handleObjectPlace}
               onObjectClick={handleObjectDelete}
+              onObjectMove={handleObjectMove}
               zoom={zoom}
               panX={panX}
               panY={panY}

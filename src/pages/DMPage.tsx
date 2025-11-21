@@ -32,6 +32,7 @@ import {
   Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { MapCanvas, MapCanvasRef } from '../components/MapCanvas';
+import { PalettePanel } from '../components/PalettePanel';
 import { wsService } from '../services/websocket';
 import {
   LightingState,
@@ -41,7 +42,8 @@ import {
   WSEventType,
 } from '../types/dm';
 import { MapData } from '../types/generator';
-import { PlacedObject } from '../types/objects';
+import { PlacedObject, PlacementMode } from '../types/objects';
+import { Palette } from '../types/palette';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -72,7 +74,7 @@ export const DMPage: React.FC = () => {
   const passedState = location.state as {
     mapData?: MapData | null;
     workspace?: any;
-    palette?: any;
+    palette?: Palette;
     placedObjects?: PlacedObject[];
     spritesheets?: any[];
     sessionId?: string;
@@ -82,10 +84,15 @@ export const DMPage: React.FC = () => {
   const [sessionId] = useState(passedState?.sessionId || `session_${Date.now()}`);
   const [connected, setConnected] = useState(false);
   const [mapData] = useState<MapData | null>(passedState?.mapData || null);
+  const [palette] = useState<Palette | null>(passedState?.palette || null);
   const [placedObjects] = useState<PlacedObject[]>(
     passedState?.placedObjects || []
   );
   const canvasRef = useRef<MapCanvasRef>(null);
+
+  // Object placement state
+  const [objectPlacementMode, setObjectPlacementMode] = useState(false);
+  const [selectedSpriteId, setSelectedSpriteId] = useState<string | null>(null);
 
   // Lighting state
   const [lighting, setLighting] = useState<LightingState>({
@@ -282,6 +289,67 @@ export const DMPage: React.FC = () => {
     });
   }, []);
 
+  // Handle object placement
+  const handleObjectPlace = useCallback((obj: PlacedObject) => {
+    const newDmObject: DMObject = {
+      id: obj.id,
+      spriteId: obj.spriteId,
+      x: obj.gridX,
+      y: obj.gridY,
+      category: 'environment',
+      visibleToPlayers: true,
+      notes: '',
+      scaleX: obj.scaleX,
+      scaleY: obj.scaleY,
+      rotation: obj.rotation,
+      zIndex: obj.zIndex,
+    };
+    
+    setDmObjects((prev) => {
+      const updated = [...prev, newDmObject];
+      wsService.send({
+        type: WSEventType.OBJECT_PLACED,
+        payload: newDmObject,
+      });
+      return updated;
+    });
+    
+    // Keep placement mode active for multiple placements
+    console.log('[DMPage] Object placed:', newDmObject);
+  }, []);
+
+  // Handle sprite selection
+  const handleSpriteSelect = useCallback((spriteId: string | null) => {
+    setSelectedSpriteId(spriteId);
+    if (spriteId) {
+      setObjectPlacementMode(true);
+    }
+  }, []);
+
+  // Handle object click (for selection or deletion)
+  const handleObjectClick = useCallback((objId: string | null) => {
+    console.log('[DMPage] Object clicked:', objId);
+    // Could implement object selection/deletion here
+  }, []);
+
+  // Handle object movement (drag and drop)
+  const handleObjectMove = useCallback((objId: string, newX: number, newY: number) => {
+    setDmObjects((prev) => {
+      const updated = prev.map((obj) =>
+        obj.id === objId ? { ...obj, x: newX, y: newY } : obj
+      );
+      const updatedObj = updated.find((o) => o.id === objId);
+      if (updatedObj) {
+        wsService.send({
+          type: WSEventType.OBJECT_UPDATED,
+          payload: updatedObj,
+        });
+        console.log('[DMPage] Object moved:', objId, 'to', newX, newY);
+      }
+      return updated;
+    });
+  }, []);
+
   // Handle sync now
   const handleSyncNow = useCallback(() => {
     const sessionState: DMSessionState = {
@@ -384,8 +452,23 @@ export const DMPage: React.FC = () => {
               showCorridors={true}
               showTrees={true}
               showObjects={true}
-              placedObjects={[]}
+              placedObjects={dmObjects.map(obj => ({
+                id: obj.id,
+                spriteId: obj.spriteId,
+                gridX: obj.x,
+                gridY: obj.y,
+                scaleX: obj.scaleX || 1,
+                scaleY: obj.scaleY || 1,
+                rotation: obj.rotation || 0,
+                zIndex: obj.zIndex || 0,
+              }))}
               spritesheets={[]}
+              palette={palette}
+              placementMode={objectPlacementMode ? PlacementMode.Place : PlacementMode.None}
+              selectedSpriteId={selectedSpriteId}
+              onObjectPlace={handleObjectPlace}
+              onObjectClick={handleObjectClick}
+              onObjectMove={handleObjectMove}
             />
             
             {/* Light source indicators on DM map */}
@@ -443,6 +526,29 @@ export const DMPage: React.FC = () => {
               />
             </Box>
           )}
+          
+          {/* Object placement indicator */}
+          {objectPlacementMode && selectedSpriteId && (
+            <Box
+              sx={{
+                position: 'absolute',
+                top: 16,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 1000,
+              }}
+            >
+              <Chip
+                label="Click to place sprite"
+                color="secondary"
+                size="small"
+                onDelete={() => {
+                  setObjectPlacementMode(false);
+                  setSelectedSpriteId(null);
+                }}
+              />
+            </Box>
+          )}
         </Box>
 
         {/* Control Panel */}
@@ -459,6 +565,7 @@ export const DMPage: React.FC = () => {
             <Tabs value={tabValue} onChange={(_, v) => setTabValue(v)} variant="fullWidth">
               <Tab label="Lighting" />
               <Tab label="Objects" />
+              <Tab label="Sprites" />
               <Tab label="Sync" />
             </Tabs>
           </Box>
@@ -637,8 +744,34 @@ export const DMPage: React.FC = () => {
             ))}
         </TabPanel>
 
-        {/* Sync Tab */}
+        {/* Sprites Tab */}
         <TabPanel value={tabValue} index={2}>
+          {palette ? (
+            <PalettePanel
+              palette={palette}
+              selectedSpriteId={selectedSpriteId}
+              onSpriteSelect={handleSpriteSelect}
+              onOpenUploadDialog={() => {}}
+              onCreateCategory={() => {}}
+              onDeleteCategory={() => {}}
+              onMoveSprite={() => {}}
+              onDeleteSprite={() => {}}
+              onRenameSprite={() => {}}
+            />
+          ) : (
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <Typography variant="body2" color="text.secondary">
+                No sprite palette available.
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Start a session from the map builder with a loaded palette.
+              </Typography>
+            </Box>
+          )}
+        </TabPanel>
+
+        {/* Sync Tab */}
+        <TabPanel value={tabValue} index={3}>
           <Typography variant="h6" gutterBottom>
             Session Management
           </Typography>

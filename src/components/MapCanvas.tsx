@@ -5,6 +5,7 @@ import React, { useRef, useEffect, forwardRef, useImperativeHandle, useState, us
 import { MapData, TerrainType } from '../types/generator';
 import { PerlinNoise } from '../utils/noise';
 import { PlacedObject, PlacementMode, SpriteSheet } from '../types/objects';
+import { Palette } from '../types/palette';
 import { getSpriteById, renderSprite } from '../utils/spritesheet';
 
 interface MapCanvasProps {
@@ -18,10 +19,12 @@ interface MapCanvasProps {
   showObjects?: boolean;
   placedObjects?: PlacedObject[];
   spritesheets?: SpriteSheet[];
+  palette?: Palette | null; // New: support for Palette system
   placementMode?: PlacementMode;
   selectedSpriteId?: string | null;
   onObjectPlace?: (obj: PlacedObject) => void;
   onObjectClick?: (objId: string | null) => void;
+  onObjectMove?: (objId: string, newX: number, newY: number) => void; // New: for dragging
   // Pan and zoom props
   zoom?: number;
   panX?: number;
@@ -77,10 +80,12 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
   showObjects = false,
   placedObjects = [],
   spritesheets = [],
+  palette = null,
   placementMode = PlacementMode.None,
   selectedSpriteId = null,
   onObjectPlace,
   onObjectClick,
+  onObjectMove,
   zoom = 1,
   panX = 0,
   panY = 0,
@@ -96,6 +101,10 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
   const [showExportButtons, setShowExportButtons] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  
+  // Object dragging state
+  const [draggedObjectId, setDraggedObjectId] = useState<string | null>(null);
+  const [draggedObjectStart, setDraggedObjectStart] = useState<{ gridX: number; gridY: number } | null>(null);
 
   // Perlin noise instance for edge roughening (seeded for consistency)
   // Memoize to avoid recreation on every render
@@ -191,26 +200,73 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
         const sortedObjects = [...placedObjects].sort((a, b) => a.zIndex - b.zIndex);
         
         for (const obj of sortedObjects) {
-          const result = getSpriteById(obj.spriteId, spritesheets);
-          if (!result) continue;
+          // Try to get sprite from Palette first, then fall back to old SpriteSheet system
+          let spriteImage: HTMLImageElement | null = null;
+          let spriteWidth = 32;
+          let spriteHeight = 32;
           
-          const { sprite, sheet } = result;
+          if (palette) {
+            // Use new Palette system
+            const sprite = palette.sprites.find(s => s.id === obj.spriteId);
+            if (sprite) {
+              spriteImage = new Image();
+              spriteImage.src = sprite.imageData;
+              spriteWidth = sprite.width;
+              spriteHeight = sprite.height;
+            }
+          } else {
+            // Use old SpriteSheet system
+            const result = getSpriteById(obj.spriteId, spritesheets);
+            if (result) {
+              const { sprite, sheet } = result;
+              // Convert grid position to pixel position (center of cell)
+              const pixelX = (obj.gridX + 0.5) * cellSize;
+              const pixelY = (obj.gridY + 0.5) * cellSize;
+              
+              // Scale sprite to fit cell size
+              const scaleX = (cellSize / sprite.width) * obj.scaleX;
+              const scaleY = (cellSize / sprite.height) * obj.scaleY;
+              
+              renderSprite(objectCtx, sprite, sheet, pixelX, pixelY, scaleX, scaleY, obj.rotation);
+              continue;
+            }
+          }
           
-          // Convert grid position to pixel position (center of cell)
-          const pixelX = (obj.gridX + 0.5) * cellSize;
-          const pixelY = (obj.gridY + 0.5) * cellSize;
-          
-          // Scale sprite to fit cell size
-          const scaleX = (cellSize / sprite.width) * obj.scaleX;
-          const scaleY = (cellSize / sprite.height) * obj.scaleY;
-          
-          renderSprite(objectCtx, sprite, sheet, pixelX, pixelY, scaleX, scaleY, obj.rotation);
+          // If we have a sprite image from Palette, render it
+          if (spriteImage) {
+            // Capture the image reference for the closure
+            const imgToRender = spriteImage;
+            const imgWidth = spriteWidth;
+            const imgHeight = spriteHeight;
+            const objData = { ...obj };
+            
+            // Wait for image to load, then draw
+            imgToRender.onload = () => {
+              const pixelX = (objData.gridX + 0.5) * cellSize;
+              const pixelY = (objData.gridY + 0.5) * cellSize;
+              
+              const scaleX = (cellSize / imgWidth) * objData.scaleX;
+              const scaleY = (cellSize / imgHeight) * objData.scaleY;
+              
+              objectCtx.save();
+              objectCtx.translate(pixelX, pixelY);
+              objectCtx.rotate((objData.rotation * Math.PI) / 180);
+              objectCtx.drawImage(
+                imgToRender,
+                -imgWidth * scaleX / 2,
+                -imgHeight * scaleY / 2,
+                imgWidth * scaleX,
+                imgHeight * scaleY
+              );
+              objectCtx.restore();
+            };
+          }
         }
         
       }
     }
 
-  }, [mapData, cellSize, showGrid, showRooms, showCorridors, showTrees, showObjects, placedObjects, spritesheets]);
+  }, [mapData, cellSize, showGrid, showRooms, showCorridors, showTrees, showObjects, placedObjects, spritesheets, palette]);
 
   // Handle canvas clicks for object placement/deletion
   const handleContainerClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
@@ -275,16 +331,49 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
     onZoomChange(newZoom);
   }, [zoom, onZoomChange]);
 
-  // Ctrl+Drag pan handlers
+  // Ctrl+Drag pan handlers OR object drag handlers
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    // Ctrl + Click = Pan
     if (e.ctrlKey && onPanChange) {
       setIsDragging(true);
       setDragStart({ x: e.clientX - panX, y: e.clientY - panY });
       e.preventDefault();
+      return;
     }
-  }, [panX, panY, onPanChange]);
+    
+    // Check if we clicked on an object (for dragging objects)
+    if (placementMode === PlacementMode.None && placedObjects.length > 0) {
+      const stackDiv = e.currentTarget.querySelector('.canvas-stack') as HTMLElement;
+      if (!stackDiv) return;
+      
+      const rect = stackDiv.getBoundingClientRect();
+      const canvasX = e.clientX - rect.left;
+      const canvasY = e.clientY - rect.top;
+      
+      const gridX = Math.floor(canvasX / cellSize);
+      const gridY = Math.floor(canvasY / cellSize);
+      
+      // Find if we clicked on any object (check in reverse order for top-most object)
+      const clickedObject = [...placedObjects]
+        .sort((a, b) => b.zIndex - a.zIndex)
+        .find(obj => {
+          const objGridX = obj.gridX;
+          const objGridY = obj.gridY;
+          // Check if click is within object bounds (assuming 1x1 grid cell)
+          return gridX === objGridX && gridY === objGridY;
+        });
+      
+      if (clickedObject) {
+        setDraggedObjectId(clickedObject.id);
+        setDraggedObjectStart({ gridX: clickedObject.gridX, gridY: clickedObject.gridY });
+        e.preventDefault();
+        console.log('[MapCanvas] Started dragging object:', clickedObject.id);
+      }
+    }
+  }, [panX, panY, onPanChange, placementMode, placedObjects, cellSize]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    // Handle pan dragging
     if (isDragging && onPanChange) {
       const newPanX = e.clientX - dragStart.x;
       const newPanY = e.clientY - dragStart.y;
@@ -292,14 +381,41 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
       const dy = newPanY - panY;
       onPanChange(dx, dy);
       e.preventDefault();
+      return;
     }
-  }, [isDragging, dragStart, panX, panY, onPanChange]);
+    
+    // Handle object dragging
+    if (draggedObjectId && draggedObjectStart && onObjectMove) {
+      const stackDiv = e.currentTarget.querySelector('.canvas-stack') as HTMLElement;
+      if (!stackDiv) return;
+      
+      const rect = stackDiv.getBoundingClientRect();
+      const canvasX = e.clientX - rect.left;
+      const canvasY = e.clientY - rect.top;
+      
+      const newGridX = Math.floor(canvasX / cellSize);
+      const newGridY = Math.floor(canvasY / cellSize);
+      
+      // Only update if position changed
+      if (newGridX !== draggedObjectStart.gridX || newGridY !== draggedObjectStart.gridY) {
+        onObjectMove(draggedObjectId, newGridX, newGridY);
+        setDraggedObjectStart({ gridX: newGridX, gridY: newGridY });
+      }
+      
+      e.preventDefault();
+    }
+  }, [isDragging, dragStart, panX, panY, onPanChange, draggedObjectId, draggedObjectStart, onObjectMove, cellSize]);
 
   const handleMouseUp = useCallback(() => {
     if (isDragging) {
       setIsDragging(false);
     }
-  }, [isDragging]);
+    if (draggedObjectId) {
+      setDraggedObjectId(null);
+      setDraggedObjectStart(null);
+      console.log('[MapCanvas] Finished dragging object');
+    }
+  }, [isDragging, draggedObjectId]);
 
   if (!mapData) {
     return (
@@ -336,6 +452,7 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
       onMouseLeave={handleMouseUp}
       style={{
         cursor: isDragging ? 'grabbing' : 
+                draggedObjectId ? 'move' :
                 placementMode === PlacementMode.Place ? 'crosshair' :
                 placementMode === PlacementMode.Delete ? 'not-allowed' : 'default'
       }}
