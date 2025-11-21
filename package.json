@@ -33,7 +33,8 @@
     "ws-server": "node server/websocket-server.js",
     "dev": "concurrently \"npm run ws-server\" \"npm start\"",
     "serve": "npx serve -s build -l 6000",
-    "prod": "concurrently \"npm run ws-server\" \"npm run serve\""
+    "prod": "concurrently \"npm run ws-server\" \"npm run serve\"",
+    "deploy": "powershell -ExecutionPolicy Bypass -File ./deploy.ps1"
   },
   "eslintConfig": {
     "extends": [
