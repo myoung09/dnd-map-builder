@@ -15,6 +15,7 @@ export interface Sprite {
   imageData: string; // Base64 encoded image data
   category: string; // Category this sprite belongs to
   tags?: string[]; // Optional tags for filtering
+  sheetId?: string; // Optional reference to parent spritesheet
 }
 
 /**
