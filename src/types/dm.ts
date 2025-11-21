@@ -43,6 +43,7 @@ export interface DMSessionState {
   workspaceId: string;
   mapId: string;
   mapData?: any; // MapData from generator types
+  palette?: any; // Palette from palette types
   lighting: LightingState;
   objects: DMObject[];
   revealedAreas: RevealedArea[];

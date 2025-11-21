@@ -142,6 +142,7 @@ export const DMPage: React.FC = () => {
           workspaceId: 'workspace_1',
           mapId: 'map_1',
           mapData: mapData,
+          palette: palette,
           lighting,
           objects: dmObjects,
           revealedAreas: [],
@@ -164,7 +165,7 @@ export const DMPage: React.FC = () => {
     return () => {
       wsService.disconnect();
     };
-  }, [sessionId, mapData, lighting, dmObjects]);
+  }, [sessionId, mapData, palette, lighting, dmObjects]);
 
   // Handle lighting changes
   const handleBrightnessChange = useCallback((value: number) => {

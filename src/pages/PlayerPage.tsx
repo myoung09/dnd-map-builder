@@ -12,6 +12,20 @@ import {
   WSEvent,
 } from '../types/dm';
 import { MapData } from '../types/generator';
+import { Palette } from '../types/palette';
+import { PlacedObject } from '../types/objects';
+
+// Helper function to convert DMObject to PlacedObject
+const dmObjectToPlacedObject = (dmObj: DMObject): PlacedObject => ({
+  id: dmObj.id,
+  spriteId: dmObj.spriteId,
+  gridX: dmObj.x,
+  gridY: dmObj.y,
+  scaleX: dmObj.scaleX,
+  scaleY: dmObj.scaleY,
+  rotation: dmObj.rotation,
+  zIndex: dmObj.zIndex,
+});
 
 interface PlayerPageProps {
   sessionId?: string;
@@ -25,6 +39,7 @@ export const PlayerPage: React.FC<PlayerPageProps> = ({ sessionId: propSessionId
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mapData, setMapData] = useState<MapData | null>(null);
+  const [palette, setPalette] = useState<Palette | null>(null);
   const canvasRef = useRef<MapCanvasRef>(null);
 
   // Player view state (controlled by DM)
@@ -160,6 +175,12 @@ export const PlayerPage: React.FC<PlayerPageProps> = ({ sessionId: propSessionId
           console.log('[PlayerPage] Map data loaded');
         }
         
+        // Update palette if provided
+        if (state.palette) {
+          setPalette(state.palette);
+          console.log('[PlayerPage] Palette loaded');
+        }
+        
         setLighting(state.lighting);
         setVisibleObjects(state.objects.filter((o) => o.visibleToPlayers));
       }
@@ -271,8 +292,9 @@ export const PlayerPage: React.FC<PlayerPageProps> = ({ sessionId: propSessionId
             showCorridors={true}
             showTrees={true}
             showObjects={true}
-            placedObjects={[]}
+            placedObjects={visibleObjects.map(dmObjectToPlacedObject)}
             spritesheets={[]}
+            palette={palette}
           />
           
           {/* Fog of War Canvas Overlay */}
