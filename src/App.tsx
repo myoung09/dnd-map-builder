@@ -21,7 +21,7 @@ import { getPresetByName, getPresetsByTerrain } from './utils/presets';
 import { WorkspaceManager } from './utils/workspaceManager';
 import { ParsedCampaignData } from './utils/campaignParser';
 import { sliceSpritesheet } from './utils/spriteUtils';
-import { createDefaultPalette } from './utils/defaultPalette';
+import { createSimplePalette } from './utils/simplePalette';
 import { Box, ThemeProvider, createTheme, CssBaseline, Drawer, Tabs, Tab, Typography, Button } from '@mui/material';
 
 // Import sprite sheet images
@@ -749,102 +749,26 @@ function App() {
     console.log('[App] Palette useEffect triggered');
     const loadDefaultPalette = async () => {
       try {
-        console.log('[App] Loading default sprite palette...');
+        console.log('[App] Loading sprite palette with auto-detection...');
         
-        // Helper function to convert image to base64
-        const imageToBase64 = (imgSrc: string): Promise<string> => {
-          return new Promise((resolve, reject) => {
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
-            img.onload = () => {
-              const canvas = document.createElement('canvas');
-              canvas.width = img.width;
-              canvas.height = img.height;
-              const ctx = canvas.getContext('2d');
-              if (ctx) {
-                ctx.drawImage(img, 0, 0);
-                resolve(canvas.toDataURL('image/png'));
-              } else {
-                reject(new Error('Failed to get canvas context'));
-              }
-            };
-            img.onerror = reject;
-            img.src = imgSrc;
-          });
-        };
-
-        // Load all sprite sheet images
-        const [roguesData, monstersData, animalsData, itemsData, tilesData] = await Promise.all([
-          imageToBase64(roguesImg),
-          imageToBase64(monstersImg),
-          imageToBase64(animalsImg),
-          imageToBase64(itemsImg),
-          imageToBase64(animatedTilesImg),
-        ]);
-
-        // Create default palette
-        const defaultPalette = createDefaultPalette();
-        console.log('[App] Default palette created with', defaultPalette.sprites.length, 'sprites in', defaultPalette.categories.length, 'categories');
+        // Use the simple palette loader that auto-detects and filters blanks
+        const palette = await createSimplePalette(
+          roguesImg,
+          monstersImg,
+          animalsImg,
+          itemsImg,
+          animatedTilesImg
+        );
         
-        // Populate image data for each spritesheet
-        defaultPalette.spritesheets.forEach(sheet => {
-          switch (sheet.id) {
-            case 'rogues':
-              sheet.imageData = roguesData;
-              break;
-            case 'monsters':
-              sheet.imageData = monstersData;
-              break;
-            case 'animals':
-              sheet.imageData = animalsData;
-              break;
-            case 'items':
-              sheet.imageData = itemsData;
-              break;
-            case 'animated-tiles':
-              sheet.imageData = tilesData;
-              break;
-          }
+        setPalette(palette);
+        console.log(`[App] Palette loaded with ${palette.sprites.length} non-blank sprites`);
+        console.log('[App] Sprites by category:');
+        palette.categories.forEach(cat => {
+          const count = palette.sprites.filter(s => s.category === cat.id).length;
+          console.log(`  - ${cat.name}: ${count} sprites`);
         });
-
-        // Extract individual sprites from each sheet
-        for (const sheet of defaultPalette.spritesheets) {
-          const img = new Image();
-          img.src = sheet.imageData;
-          
-          await new Promise<void>((resolve, reject) => {
-            img.onload = () => {
-              // Extract each sprite from the sheet
-              const canvas = document.createElement('canvas');
-              canvas.width = sheet.spriteWidth;
-              canvas.height = sheet.spriteHeight;
-              const ctx = canvas.getContext('2d');
-              
-              if (ctx) {
-                // Find all sprites for this sheet by sheetId
-                const sheetSprites = defaultPalette.sprites.filter(sprite => sprite.sheetId === sheet.id);
-
-                sheetSprites.forEach(sprite => {
-                  ctx.clearRect(0, 0, canvas.width, canvas.height);
-                  ctx.drawImage(
-                    img,
-                    sprite.x, sprite.y, sprite.width, sprite.height,
-                    0, 0, sprite.width, sprite.height
-                  );
-                  sprite.imageData = canvas.toDataURL('image/png');
-                });
-              }
-              resolve();
-            };
-            img.onerror = reject;
-          });
-        }
-
-        setPalette(defaultPalette);
-        console.log(`[App] Default palette loaded with ${defaultPalette.sprites.length} sprites`);
-        console.log('[App] Palette state updated:', defaultPalette);
       } catch (error) {
-        console.error('[App] Failed to load default palette:', error);
+        console.error('[App] Failed to load palette:', error);
       }
     };
     

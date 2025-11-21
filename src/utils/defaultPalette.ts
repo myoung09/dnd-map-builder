@@ -543,16 +543,18 @@ function generateSprites(
   sheetWidth: number,
   sheetHeight: number,
   spriteSize: number = 32,
-  sheetId: string = ''
+  sheetId: string = '',
+  startIndex: number = 0
 ): Sprite[] {
   const columns = Math.floor(sheetWidth / spriteSize);
   
   return partialSprites.map((partial, index) => {
-    const col = index % columns;
-    const row = Math.floor(index / columns);
+    const absoluteIndex = startIndex + index;
+    const col = absoluteIndex % columns;
+    const row = Math.floor(absoluteIndex / columns);
     
     return {
-      id: `${sheetId}_${index}`,
+      id: `${sheetId}_${absoluteIndex}`,
       name: partial.name || `Unnamed Sprite ${index}`,
       x: col * spriteSize,
       y: row * spriteSize,
