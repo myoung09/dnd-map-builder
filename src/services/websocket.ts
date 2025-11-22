@@ -20,8 +20,8 @@ class WebSocketService {
   connect(sessionId: string, role: 'dm' | 'player'): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
-        // For development, use localhost. In production, use environment variable
-        const wsUrl = process.env.REACT_APP_WS_URL || 'ws://localhost:3001';
+        // For development, use localhost:7000. In production, use environment variable
+        const wsUrl = process.env.REACT_APP_WS_URL || 'ws://localhost:7000';
         this.ws = new WebSocket(`${wsUrl}?sessionId=${sessionId}&role=${role}`);
 
         this.ws.onopen = () => {

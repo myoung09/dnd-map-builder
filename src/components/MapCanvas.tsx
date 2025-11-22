@@ -427,7 +427,7 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
 
   const transformStyle = {
     transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
-    transformOrigin: 'center center',
+    transformOrigin: 'top left', // Scale from top-left corner, not center
     transition: 'transform 0.1s ease-out'
   };
 

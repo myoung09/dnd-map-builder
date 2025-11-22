@@ -33,6 +33,7 @@ import {
 } from '@mui/icons-material';
 import { MapCanvas, MapCanvasRef } from '../components/MapCanvas';
 import { PalettePanel } from '../components/PalettePanel';
+import { ViewWindowOverlay } from '../components/ViewWindowOverlay';
 import { wsService } from '../services/websocket';
 import {
   LightingState,
@@ -40,6 +41,7 @@ import {
   DMObject,
   DMSessionState,
   WSEventType,
+  ViewWindow,
 } from '../types/dm';
 import { MapData } from '../types/generator';
 import { PlacedObject, PlacementMode } from '../types/objects';
@@ -120,6 +122,26 @@ export const DMPage: React.FC = () => {
   );
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
+  // DM view pan/zoom state
+  const [dmZoom, setDmZoom] = useState(1);
+  const [dmPanX, setDmPanX] = useState(0);
+  const [dmPanY, setDmPanY] = useState(0);
+
+  // View window state (controls player viewport)
+  const [viewWindow, setViewWindow] = useState<ViewWindow>(() => {
+    // Start with a reasonable size - about 20x15 cells at cellSize 20 = 400x300
+    const initialWidth = 400;
+    const initialHeight = 300;
+    return {
+      x: 0,
+      y: 0,
+      width: initialWidth,
+      height: initialHeight,
+      minWidth: 200,  // Allow shrinking to 10x cells
+      minHeight: 150, // Maintain 4:3 aspect ratio minimum
+    };
+  });
+
   // Light placement state
   const [lightPlacementMode, setLightPlacementMode] = useState(false);
   const [selectedLightType, setSelectedLightType] = useState<'torch' | 'lantern' | 'spell' | 'ambient'>('torch');
@@ -143,6 +165,7 @@ export const DMPage: React.FC = () => {
           mapId: 'map_1',
           mapData: mapData,
           palette: palette,
+          viewWindow: viewWindow,
           lighting,
           objects: dmObjects,
           revealedAreas: [],
@@ -165,7 +188,7 @@ export const DMPage: React.FC = () => {
     return () => {
       wsService.disconnect();
     };
-  }, [sessionId, mapData, palette, lighting, dmObjects]);
+  }, [sessionId, mapData, palette, viewWindow, lighting, dmObjects]);
 
   // Handle lighting changes
   const handleBrightnessChange = useCallback((value: number) => {
@@ -273,6 +296,20 @@ export const DMPage: React.FC = () => {
     });
   }, []);
 
+  // Handle view window changes (drag and resize)
+  const handleViewWindowChange = useCallback((newViewWindow: ViewWindow) => {
+    setViewWindow(newViewWindow);
+    
+    // Broadcast to players
+    wsService.send({
+      type: WSEventType.VIEW_WINDOW_UPDATE,
+      payload: newViewWindow,
+    });
+    
+    console.log('[DMPage] View window updated (canvas coords):', newViewWindow);
+    console.log('[DMPage] DM current transform:', { dmZoom, dmPanX, dmPanY });
+  }, [dmZoom, dmPanX, dmPanY]);
+
   // Handle object visibility toggle
   const handleToggleObjectVisibility = useCallback((objectId: string) => {
     setDmObjects((prev) => {
@@ -351,6 +388,17 @@ export const DMPage: React.FC = () => {
     });
   }, []);
 
+  // Handle DM view zoom change
+  const handleDmZoomChange = useCallback((newZoom: number) => {
+    setDmZoom(newZoom);
+  }, []);
+
+  // Handle DM view pan change
+  const handleDmPanChange = useCallback((dx: number, dy: number) => {
+    setDmPanX(prev => prev + dx);
+    setDmPanY(prev => prev + dy);
+  }, []);
+
   // Handle sync now
   const handleSyncNow = useCallback(() => {
     const sessionState: DMSessionState = {
@@ -425,15 +473,12 @@ export const DMPage: React.FC = () => {
 
       {/* Main Content */}
       <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* Map Canvas - Centered */}
+        {/* Map Canvas Container - Fill area, no centering */}
         <Box 
           sx={{ 
             flex: 1, 
             position: 'relative', 
-            overflow: 'hidden',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            overflow: 'auto', // Changed from hidden to auto for scrolling if needed
           }}
         >
           {/* Canvas wrapper for click handling and light positioning */}
@@ -441,6 +486,9 @@ export const DMPage: React.FC = () => {
             sx={{
               position: 'relative',
               cursor: lightPlacementMode ? 'crosshair' : 'default',
+              width: 'fit-content',
+              minWidth: '100%',
+              minHeight: '100%',
             }}
             onClick={handleMapClick}
           >
@@ -470,7 +518,26 @@ export const DMPage: React.FC = () => {
               onObjectPlace={handleObjectPlace}
               onObjectClick={handleObjectClick}
               onObjectMove={handleObjectMove}
+              zoom={dmZoom}
+              panX={dmPanX}
+              panY={dmPanY}
+              onZoomChange={handleDmZoomChange}
+              onPanChange={handleDmPanChange}
             />
+            
+            {/* View Window Overlay - Controls player viewport */}
+            {mapData && (
+              <ViewWindowOverlay
+                viewWindow={viewWindow}
+                onViewWindowChange={handleViewWindowChange}
+                mapWidth={mapData.width}
+                mapHeight={mapData.height}
+                cellSize={20}
+                dmZoom={dmZoom}
+                dmPanX={dmPanX}
+                dmPanY={dmPanY}
+              />
+            )}
             
             {/* Light source indicators on DM map */}
             {lighting.lightSources.map((light) => (

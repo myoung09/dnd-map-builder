@@ -23,6 +23,15 @@ export interface RevealedArea {
   shape: 'circle' | 'rectangle' | 'polygon';
 }
 
+export interface ViewWindow {
+  x: number; // Top-left X position in pixels
+  y: number; // Top-left Y position in pixels
+  width: number; // Width in pixels
+  height: number; // Height in pixels
+  minWidth: number; // Minimum width constraint
+  minHeight: number; // Minimum height constraint
+}
+
 export interface DMObject {
   id: string;
   spriteId: string;
@@ -44,6 +53,7 @@ export interface DMSessionState {
   mapId: string;
   mapData?: any; // MapData from generator types
   palette?: any; // Palette from palette types
+  viewWindow?: ViewWindow; // Player viewport control
   lighting: LightingState;
   objects: DMObject[];
   revealedAreas: RevealedArea[];
@@ -60,6 +70,7 @@ export enum WSEventType {
   OBJECT_UPDATED = 'OBJECT_UPDATED',
   AREA_REVEALED = 'AREA_REVEALED',
   AREA_HIDDEN = 'AREA_HIDDEN',
+  VIEW_WINDOW_UPDATE = 'VIEW_WINDOW_UPDATE',
   SYNC_NOW = 'SYNC_NOW',
   SESSION_SAVE = 'SESSION_SAVE',
   SESSION_LOAD = 'SESSION_LOAD',
@@ -119,6 +130,11 @@ export interface WSAreaHiddenEvent {
   };
 }
 
+export interface WSViewWindowUpdateEvent {
+  type: WSEventType.VIEW_WINDOW_UPDATE;
+  payload: ViewWindow;
+}
+
 export interface WSSyncNowEvent {
   type: WSEventType.SYNC_NOW;
   payload: {
@@ -165,6 +181,7 @@ export type WSEvent =
   | WSObjectUpdatedEvent
   | WSAreaRevealedEvent
   | WSAreaHiddenEvent
+  | WSViewWindowUpdateEvent
   | WSSyncNowEvent
   | WSSessionSaveEvent
   | WSSessionLoadEvent

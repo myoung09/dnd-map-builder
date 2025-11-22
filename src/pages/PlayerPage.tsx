@@ -10,6 +10,7 @@ import {
   DMSessionState,
   WSEventType,
   WSEvent,
+  ViewWindow,
 } from '../types/dm';
 import { MapData } from '../types/generator';
 import { Palette } from '../types/palette';
@@ -51,7 +52,57 @@ export const PlayerPage: React.FC<PlayerPageProps> = ({ sessionId: propSessionId
   });
 
   const [visibleObjects, setVisibleObjects] = useState<DMObject[]>([]);
+  const [viewWindow, setViewWindow] = useState<ViewWindow | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [panX, setPanX] = useState(0);
+  const [panY, setPanY] = useState(0);
   const fogCanvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Calculate pan/zoom from view window to show the exact area
+  useEffect(() => {
+    if (!viewWindow || !mapData) return;
+    
+    // The view window defines a rectangle in canvas coordinates
+    // We want to show exactly this rectangle, filling the player's viewport
+    
+    // Get the viewport size
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    
+    // Calculate zoom to fill the viewport with the view window
+    // Use the smaller zoom to ensure the entire view window fits
+    const zoomX = viewportWidth / viewWindow.width;
+    const zoomY = viewportHeight / viewWindow.height;
+    const newZoom = Math.min(zoomX, zoomY);
+    
+    // Calculate pan to position the view window at top-left of viewport
+    // Formula: screenPos = canvasPos * zoom + pan
+    // We want: viewWindow.x * zoom + pan = 0 (top-left of screen)
+    // So: pan = -viewWindow.x * zoom
+    const newPanX = -viewWindow.x * newZoom;
+    const newPanY = -viewWindow.y * newZoom;
+    
+    setZoom(newZoom);
+    setPanX(newPanX);
+    setPanY(newPanY);
+    
+    console.log('[PlayerPage] View window calculation:', {
+      viewWindow,
+      viewport: { width: viewportWidth, height: viewportHeight },
+      zoomCalc: { zoomX, zoomY, chosen: newZoom },
+      result: { zoom: newZoom, panX: newPanX, panY: newPanY },
+      verification: {
+        topLeftScreen: {
+          x: viewWindow.x * newZoom + newPanX,
+          y: viewWindow.y * newZoom + newPanY
+        },
+        bottomRightScreen: {
+          x: (viewWindow.x + viewWindow.width) * newZoom + newPanX,
+          y: (viewWindow.y + viewWindow.height) * newZoom + newPanY
+        }
+      }
+    });
+  }, [viewWindow, mapData]);
 
   // Draw fog of war on canvas
   useEffect(() => {
@@ -181,8 +232,22 @@ export const PlayerPage: React.FC<PlayerPageProps> = ({ sessionId: propSessionId
           console.log('[PlayerPage] Palette loaded');
         }
         
+        // Update view window if provided
+        if (state.viewWindow) {
+          setViewWindow(state.viewWindow);
+          console.log('[PlayerPage] View window loaded');
+        }
+        
         setLighting(state.lighting);
         setVisibleObjects(state.objects.filter((o) => o.visibleToPlayers));
+      }
+    });
+
+    // Handle view window updates
+    const unsubViewWindow = wsService.on(WSEventType.VIEW_WINDOW_UPDATE, (event: WSEvent) => {
+      if (event.type === WSEventType.VIEW_WINDOW_UPDATE) {
+        console.log('[PlayerPage] View window updated (raw):', event.payload);
+        setViewWindow(event.payload);
       }
     });
 
@@ -200,6 +265,7 @@ export const PlayerPage: React.FC<PlayerPageProps> = ({ sessionId: propSessionId
       unsubUpdated();
       unsubRemoved();
       unsubSync();
+      unsubViewWindow();
       unsubMapInit();
     };
   }, [connected]);
@@ -270,19 +336,29 @@ export const PlayerPage: React.FC<PlayerPageProps> = ({ sessionId: propSessionId
         <Chip label={`Session: ${sessionId}`} size="small" variant="outlined" />
       </Box>
 
-      {/* Map Canvas Container - Centered */}
+      {/* Map Canvas Container - Fill viewport, no centering */}
       <Box
         sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
           width: '100%',
           height: '100%',
           position: 'relative',
+          overflow: 'hidden',
         }}
       >
-        {/* Canvas and fog wrapper for proper alignment */}
-        <Box sx={{ position: 'relative' }}>
+        {/* Canvas wrapper - ensure canvas starts at 0,0 with no centering */}
+        <Box sx={{ 
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          display: 'block', // Override any flex
+          '& .map-canvas-container': {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+          }
+        }}>
           <MapCanvas
             ref={canvasRef}
             mapData={mapData}
@@ -295,6 +371,9 @@ export const PlayerPage: React.FC<PlayerPageProps> = ({ sessionId: propSessionId
             placedObjects={visibleObjects.map(dmObjectToPlacedObject)}
             spritesheets={[]}
             palette={palette}
+            zoom={zoom}
+            panX={panX}
+            panY={panY}
           />
           
           {/* Fog of War Canvas Overlay */}
