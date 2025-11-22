@@ -102,6 +102,10 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   
+  // Touch state for mobile panning
+  const [touchStartPos, setTouchStartPos] = useState<{ x: number; y: number } | null>(null);
+  const [lastTouchDistance, setLastTouchDistance] = useState<number | null>(null);
+  
   // Object dragging state
   const [draggedObjectId, setDraggedObjectId] = useState<string | null>(null);
   const [draggedObjectStart, setDraggedObjectStart] = useState<{ gridX: number; gridY: number } | null>(null);
@@ -282,12 +286,14 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
     if (!stackDiv) return;
     
     const rect = stackDiv.getBoundingClientRect();
-    const x = (event.clientX - rect.left) / zoom;
-    const y = (event.clientY - rect.top) / zoom;
+    // Fix coordinate calculation to account for pan and zoom
+    // First subtract panX/panY to account for translation, then divide by zoom
+    const x = (event.clientX - rect.left - panX) / zoom;
+    const y = (event.clientY - rect.top - panY) / zoom;
     const gridX = Math.floor(x / cellSize);
     const gridY = Math.floor(y / cellSize);
     
-    console.log('[MapCanvas] Click coords:', { x, y, gridX, gridY, cellSize, zoom });
+    console.log('[MapCanvas] Click coords:', { clientX: event.clientX, clientY: event.clientY, rectLeft: rect.left, rectTop: rect.top, panX, panY, zoom, x, y, gridX, gridY, cellSize });
     
     // Boundary check
     if (gridX < 0 || gridX >= mapData.width || gridY < 0 || gridY >= mapData.height) {
@@ -319,7 +325,7 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
         console.log(`[MapCanvas] Deleted object at (${gridX}, ${gridY})`);
       }
     }
-  }, [mapData, cellSize, placementMode, selectedSpriteId, onObjectPlace, onObjectClick, placedObjects, isDragging, zoom]);
+  }, [mapData, cellSize, placementMode, selectedSpriteId, onObjectPlace, onObjectClick, placedObjects, isDragging, zoom, panX, panY]);
 
   // Mouse wheel zoom handler
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
@@ -333,7 +339,7 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
 
   // Ctrl+Drag pan handlers OR object drag handlers
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    // Ctrl + Click = Pan
+    // Ctrl + Click = Pan (or just drag on mobile without ctrl requirement)
     if (e.ctrlKey && onPanChange) {
       setIsDragging(true);
       setDragStart({ x: e.clientX - panX, y: e.clientY - panY });
@@ -347,8 +353,9 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
       if (!stackDiv) return;
       
       const rect = stackDiv.getBoundingClientRect();
-      const canvasX = e.clientX - rect.left;
-      const canvasY = e.clientY - rect.top;
+      // Fix: Account for pan and zoom when calculating click position
+      const canvasX = (e.clientX - rect.left - panX) / zoom;
+      const canvasY = (e.clientY - rect.top - panY) / zoom;
       
       const gridX = Math.floor(canvasX / cellSize);
       const gridY = Math.floor(canvasY / cellSize);
@@ -370,7 +377,7 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
         console.log('[MapCanvas] Started dragging object:', clickedObject.id);
       }
     }
-  }, [panX, panY, onPanChange, placementMode, placedObjects, cellSize]);
+  }, [panX, panY, onPanChange, placementMode, placedObjects, cellSize, zoom]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     // Handle pan dragging
@@ -390,8 +397,9 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
       if (!stackDiv) return;
       
       const rect = stackDiv.getBoundingClientRect();
-      const canvasX = e.clientX - rect.left;
-      const canvasY = e.clientY - rect.top;
+      // Fix: Account for pan and zoom
+      const canvasX = (e.clientX - rect.left - panX) / zoom;
+      const canvasY = (e.clientY - rect.top - panY) / zoom;
       
       const newGridX = Math.floor(canvasX / cellSize);
       const newGridY = Math.floor(canvasY / cellSize);
@@ -404,7 +412,7 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
       
       e.preventDefault();
     }
-  }, [isDragging, dragStart, panX, panY, onPanChange, draggedObjectId, draggedObjectStart, onObjectMove, cellSize]);
+  }, [isDragging, dragStart, panX, panY, onPanChange, draggedObjectId, draggedObjectStart, onObjectMove, cellSize, zoom]);
 
   const handleMouseUp = useCallback(() => {
     if (isDragging) {
@@ -416,6 +424,60 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
       console.log('[MapCanvas] Finished dragging object');
     }
   }, [isDragging, draggedObjectId]);
+
+  // Touch event handlers for mobile panning and pinch-to-zoom
+  const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 1) {
+      // Single touch - start pan
+      const touch = e.touches[0];
+      setTouchStartPos({ x: touch.clientX - panX, y: touch.clientY - panY });
+      setIsDragging(true);
+    } else if (e.touches.length === 2) {
+      // Two finger touch - pinch to zoom
+      const touch1 = e.touches[0];
+      const touch2 = e.touches[1];
+      const distance = Math.sqrt(
+        Math.pow(touch2.clientX - touch1.clientX, 2) +
+        Math.pow(touch2.clientY - touch1.clientY, 2)
+      );
+      setLastTouchDistance(distance);
+      e.preventDefault();
+    }
+  }, [panX, panY]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 1 && touchStartPos && onPanChange) {
+      // Single touch - pan
+      const touch = e.touches[0];
+      const newPanX = touch.clientX - touchStartPos.x;
+      const newPanY = touch.clientY - touchStartPos.y;
+      const dx = newPanX - panX;
+      const dy = newPanY - panY;
+      onPanChange(dx, dy);
+      e.preventDefault();
+    } else if (e.touches.length === 2 && lastTouchDistance !== null && onZoomChange) {
+      // Two finger touch - pinch to zoom
+      const touch1 = e.touches[0];
+      const touch2 = e.touches[1];
+      const distance = Math.sqrt(
+        Math.pow(touch2.clientX - touch1.clientX, 2) +
+        Math.pow(touch2.clientY - touch1.clientY, 2)
+      );
+      
+      // Calculate zoom delta
+      const delta = (distance - lastTouchDistance) * 0.01;
+      const newZoom = Math.max(0.5, Math.min(3, zoom + delta));
+      onZoomChange(newZoom);
+      setLastTouchDistance(distance);
+      e.preventDefault();
+    }
+  }, [touchStartPos, panX, panY, onPanChange, lastTouchDistance, zoom, onZoomChange]);
+
+  const handleTouchEnd = useCallback(() => {
+    setIsDragging(false);
+    setTouchStartPos(null);
+    setLastTouchDistance(null);
+  }, []);
 
   if (!mapData) {
     return (
@@ -450,11 +512,16 @@ export const MapCanvas = React.memo(forwardRef<MapCanvasRef, MapCanvasProps>(({
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
       style={{
         cursor: isDragging ? 'grabbing' : 
                 draggedObjectId ? 'move' :
                 placementMode === PlacementMode.Place ? 'crosshair' :
-                placementMode === PlacementMode.Delete ? 'not-allowed' : 'default'
+                placementMode === PlacementMode.Delete ? 'not-allowed' : 'grab',
+        touchAction: 'none' // Prevent default touch behaviors like scrolling
       }}
     >
       <div className="canvas-stack" style={transformStyle}>

@@ -63,6 +63,24 @@ export const ViewWindowOverlay: React.FC<ViewWindowOverlayProps> = ({
     });
   }, [viewWindow]);
 
+  // Handle touch start on the view window body (for mobile dragging)
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.classList.contains('resize-handle')) return;
+    
+    if (e.touches.length === 1) {
+      e.stopPropagation();
+      const touch = e.touches[0];
+      setIsDragging(true);
+      setDragStart({
+        x: touch.clientX,
+        y: touch.clientY,
+        windowX: viewWindow.x,
+        windowY: viewWindow.y,
+      });
+    }
+  }, [viewWindow]);
+
   // Handle mouse down on resize handles
   const handleResizeMouseDown = useCallback((e: React.MouseEvent, handle: ResizeHandle) => {
     if (e.button !== 0) return;
@@ -152,7 +170,36 @@ export const ViewWindowOverlay: React.FC<ViewWindowOverlayProps> = ({
       }
     };
 
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 1 && isDragging && dragStart) {
+        e.preventDefault();
+        const touch = e.touches[0];
+        const dx = (touch.clientX - dragStart.x) / dmZoom;
+        const dy = (touch.clientY - dragStart.y) / dmZoom;
+        
+        let newX = dragStart.windowX + dx;
+        let newY = dragStart.windowY + dy;
+        
+        newX = Math.max(0, Math.min(newX, maxWidth - viewWindow.width));
+        newY = Math.max(0, Math.min(newY, maxHeight - viewWindow.height));
+        
+        onViewWindowChange({
+          ...viewWindow,
+          x: newX,
+          y: newY,
+        });
+      }
+    };
+
     const handleMouseUp = () => {
+      setIsDragging(false);
+      setIsResizing(false);
+      setDragStart(null);
+      setResizeStart(null);
+      setResizeHandle(null);
+    };
+
+    const handleTouchEnd = () => {
       setIsDragging(false);
       setIsResizing(false);
       setDragStart(null);
@@ -163,9 +210,15 @@ export const ViewWindowOverlay: React.FC<ViewWindowOverlayProps> = ({
     if (isDragging || isResizing) {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
+      document.addEventListener('touchmove', handleTouchMove, { passive: false });
+      document.addEventListener('touchend', handleTouchEnd);
+      document.addEventListener('touchcancel', handleTouchEnd);
       return () => {
         document.removeEventListener('mousemove', handleMouseMove);
         document.removeEventListener('mouseup', handleMouseUp);
+        document.removeEventListener('touchmove', handleTouchMove);
+        document.removeEventListener('touchend', handleTouchEnd);
+        document.removeEventListener('touchcancel', handleTouchEnd);
       };
     }
   }, [isDragging, isResizing, dragStart, resizeStart, resizeHandle, viewWindow, onViewWindowChange, maxWidth, maxHeight, dmZoom]);
@@ -191,6 +244,7 @@ export const ViewWindowOverlay: React.FC<ViewWindowOverlayProps> = ({
   return (
     <Box
       ref={overlayRef}
+      className="view-window-overlay"
       sx={{
         position: 'absolute',
         left: `${transformedX}px`,
@@ -204,8 +258,10 @@ export const ViewWindowOverlay: React.FC<ViewWindowOverlayProps> = ({
         boxShadow: '0 0 10px rgba(33, 150, 243, 0.5)',
         zIndex: 1000,
         transition: isDragging || isResizing ? 'none' : 'all 0.1s ease',
+        touchAction: 'none', // Prevent default touch behaviors
       }}
       onMouseDown={handleMouseDown}
+      onTouchStart={handleTouchStart}
     >
       {/* Label */}
       <Box

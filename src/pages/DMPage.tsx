@@ -21,6 +21,10 @@ import {
   Divider,
   Alert,
   Chip,
+  Drawer,
+  Fab,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material';
 import {
   WbSunny as BrightnessIcon,
@@ -30,6 +34,8 @@ import {
   Save as SaveIcon,
   Refresh as SyncIcon,
   Delete as DeleteIcon,
+  Menu as MenuIcon,
+  Close as CloseIcon,
 } from '@mui/icons-material';
 import { MapCanvas, MapCanvasRef } from '../components/MapCanvas';
 import { PalettePanel } from '../components/PalettePanel';
@@ -71,6 +77,8 @@ function TabPanel(props: TabPanelProps) {
 export const DMPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   
   // Extract passed state from navigation
   const passedState = location.state as {
@@ -91,6 +99,9 @@ export const DMPage: React.FC = () => {
     passedState?.placedObjects || []
   );
   const canvasRef = useRef<MapCanvasRef>(null);
+
+  // Mobile drawer state
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
   // Object placement state
   const [objectPlacementMode, setObjectPlacementMode] = useState(false);
@@ -190,6 +201,21 @@ export const DMPage: React.FC = () => {
     };
   }, [sessionId, mapData, palette, viewWindow, lighting, dmObjects]);
 
+  // Handle keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cancel placement mode with Escape key
+      if (e.key === 'Escape' && (lightPlacementMode || objectPlacementMode)) {
+        setLightPlacementMode(false);
+        setObjectPlacementMode(false);
+        console.log('[DMPage] Placement mode cancelled');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [lightPlacementMode, objectPlacementMode]);
+
   // Handle lighting changes
   const handleBrightnessChange = useCallback((value: number) => {
     setLighting((prev) => {
@@ -232,6 +258,12 @@ export const DMPage: React.FC = () => {
   }, []);
 
   const handleMapClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    // Don't handle clicks if they're on the ViewWindowOverlay
+    const target = event.target as HTMLElement;
+    if (target.closest('.view-window-overlay')) {
+      return; // Let the overlay handle its own clicks
+    }
+    
     if (!lightPlacementMode || !canvasRef.current) return;
 
     // Get the actual canvas element
@@ -277,8 +309,8 @@ export const DMPage: React.FC = () => {
       return updated;
     });
 
-    // Disable placement mode after placing
-    setLightPlacementMode(false);
+    // Keep placement mode active for continuous placement
+    // User can cancel by pressing Escape or clicking Cancel button
     console.log('[DMPage] Light source placed at', x, y);
   }, [lightPlacementMode, selectedLightType]);
 
@@ -601,14 +633,45 @@ export const DMPage: React.FC = () => {
               }}
             >
               <Chip
-                label={`Click to place ${selectedLightType}`}
+                label={`🎯 Click map to place ${selectedLightType} (ESC to cancel)`}
                 color="primary"
-                size="small"
+                size="medium"
+                onDelete={() => setLightPlacementMode(false)}
+                sx={{
+                  fontWeight: 'bold',
+                  fontSize: '0.95rem',
+                  px: 1,
+                }}
+              />
+            </Box>
+          )}
+
+          {/* Object placement indicator */}
+          {objectPlacementMode && (
+            <Box
+              sx={{
+                position: 'absolute',
+                top: 16,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 1000,
+              }}
+            >
+              <Chip
+                label="🎯 Click map to place object (ESC to cancel)"
+                color="primary"
+                size="medium"
+                onDelete={() => setObjectPlacementMode(false)}
+                sx={{
+                  fontWeight: 'bold',
+                  fontSize: '0.95rem',
+                  px: 1,
+                }}
               />
             </Box>
           )}
           
-          {/* Object placement indicator */}
+          {/* Sprite placement indicator (alternative object placement with sprite ID) */}
           {objectPlacementMode && selectedSpriteId && (
             <Box
               sx={{
@@ -620,39 +683,79 @@ export const DMPage: React.FC = () => {
               }}
             >
               <Chip
-                label="Click to place sprite"
+                label="🎯 Click map to place sprite (ESC to cancel)"
                 color="secondary"
-                size="small"
+                size="medium"
                 onDelete={() => {
                   setObjectPlacementMode(false);
                   setSelectedSpriteId(null);
+                }}
+                sx={{
+                  fontWeight: 'bold',
+                  fontSize: '0.95rem',
+                  px: 1,
                 }}
               />
             </Box>
           )}
         </Box>
 
-        {/* Control Panel */}
-        <Paper
-          sx={{
-            width: 400,
-            height: '100%',
-            overflow: 'auto',
-            borderLeft: 1,
-            borderColor: 'divider',
-          }}
-        >
-          <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-            <Tabs value={tabValue} onChange={(_, v) => setTabValue(v)} variant="fullWidth">
-              <Tab label="Lighting" />
-              <Tab label="Objects" />
-              <Tab label="Sprites" />
-              <Tab label="Sync" />
-            </Tabs>
-          </Box>
+        {/* Control Panel - Responsive: Desktop fixed panel, Mobile bottom drawer */}
+        {isMobile ? (
+          // Mobile: Floating Action Button + Bottom Drawer
+          <>
+            <Fab
+              color="primary"
+              onClick={() => setMobileDrawerOpen(true)}
+              sx={{
+                position: 'fixed',
+                bottom: 16,
+                right: 16,
+                zIndex: 1200,
+              }}
+              aria-label="Open controls"
+            >
+              <MenuIcon />
+            </Fab>
+            <Drawer
+              anchor="bottom"
+              open={mobileDrawerOpen}
+              onClose={() => setMobileDrawerOpen(false)}
+              PaperProps={{
+                sx: {
+                  maxHeight: '85vh',
+                  borderTopLeftRadius: 16,
+                  borderTopRightRadius: 16,
+                }
+              }}
+            >
+              <Box sx={{ p: 2 }}>
+                {/* Drawer Header */}
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                  <Typography variant="h6">DM Controls</Typography>
+                  <IconButton
+                    onClick={() => setMobileDrawerOpen(false)}
+                    edge="end"
+                    aria-label="Close controls"
+                  >
+                    <CloseIcon />
+                  </IconButton>
+                </Box>
 
-        {/* Lighting Tab */}
-        <TabPanel value={tabValue} index={0}>
+                {/* Tabs */}
+                <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
+                  <Tabs value={tabValue} onChange={(_, v) => setTabValue(v)} variant="fullWidth">
+                    <Tab label="Lighting" />
+                    <Tab label="Objects" />
+                    <Tab label="Sprites" />
+                    <Tab label="Sync" />
+                  </Tabs>
+                </Box>
+
+                {/* Scrollable Content */}
+                <Box sx={{ maxHeight: 'calc(85vh - 140px)', overflow: 'auto' }}>
+                  {/* Lighting Tab */}
+                  <TabPanel value={tabValue} index={0}>
           <Typography variant="h6" gutterBottom>
             Lighting Controls
           </Typography>
@@ -731,12 +834,12 @@ export const DMPage: React.FC = () => {
           
           <Button
             variant={lightPlacementMode ? "contained" : "outlined"}
-            color={lightPlacementMode ? "primary" : "inherit"}
-            onClick={handleAddLightSource}
+            color={lightPlacementMode ? "success" : "primary"}
+            onClick={lightPlacementMode ? () => setLightPlacementMode(false) : handleAddLightSource}
             fullWidth
             sx={{ mb: 2 }}
           >
-            {lightPlacementMode ? '🎯 Click on Map to Place' : 'Add Light Source'}
+            {lightPlacementMode ? '✅ Done Placing Lights' : '💡 Start Placing Lights'}
           </Button>
 
           {lighting.lightSources.map((light) => (
@@ -951,7 +1054,37 @@ export const DMPage: React.FC = () => {
             </Alert>
           )}
         </TabPanel>
-      </Paper>
+                </Box>
+              </Box>
+            </Drawer>
+          </>
+        ) : (
+          // Desktop: Fixed Right Panel
+          <Paper
+            sx={{
+              width: 400,
+              height: '100%',
+              overflow: 'auto',
+              borderLeft: 1,
+              borderColor: 'divider',
+            }}
+          >
+            <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+              <Tabs value={tabValue} onChange={(_, v) => setTabValue(v)} variant="fullWidth">
+                <Tab label="Lighting" />
+                <Tab label="Objects" />
+                <Tab label="Sprites" />
+                <Tab label="Sync" />
+              </Tabs>
+            </Box>
+
+            {/* Desktop: All tab panels - same content as mobile */}
+            <Box sx={{ overflow: 'auto', height: 'calc(100% - 49px)' }}>
+              {/* Note: TabPanels are already rendered above in mobile drawer */}
+              {/* They will show/hide based on tabValue for both views */}
+            </Box>
+          </Paper>
+        )}
       </Box>
     </Box>
   );
