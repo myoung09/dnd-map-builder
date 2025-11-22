@@ -36,6 +36,8 @@ import {
   Delete as DeleteIcon,
   Menu as MenuIcon,
   Close as CloseIcon,
+  ChevronRight as ChevronRightIcon,
+  ChevronLeft as ChevronLeftIcon,
 } from '@mui/icons-material';
 import { MapCanvas, MapCanvasRef } from '../components/MapCanvas';
 import { PalettePanel } from '../components/PalettePanel';
@@ -102,6 +104,9 @@ export const DMPage: React.FC = () => {
 
   // Mobile drawer state
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  
+  // Desktop drawer state
+  const [desktopDrawerOpen, setDesktopDrawerOpen] = useState(true);
 
   // Object placement state
   const [objectPlacementMode, setObjectPlacementMode] = useState(false);
@@ -1059,31 +1064,359 @@ export const DMPage: React.FC = () => {
             </Drawer>
           </>
         ) : (
-          // Desktop: Fixed Right Panel
-          <Paper
-            sx={{
-              width: 400,
-              height: '100%',
-              overflow: 'auto',
-              borderLeft: 1,
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-              <Tabs value={tabValue} onChange={(_, v) => setTabValue(v)} variant="fullWidth">
-                <Tab label="Lighting" />
-                <Tab label="Objects" />
-                <Tab label="Sprites" />
-                <Tab label="Sync" />
-              </Tabs>
-            </Box>
+          // Desktop: Collapsible Right Panel
+          <>
+            {desktopDrawerOpen && (
+              <Paper
+                sx={{
+                  width: 400,
+                  height: '100%',
+                  overflow: 'auto',
+                  borderLeft: 1,
+                  borderColor: 'divider',
+                  transition: 'width 0.3s ease',
+                }}
+              >
+                <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+                  <Tabs value={tabValue} onChange={(_, v) => setTabValue(v)} variant="fullWidth">
+                    <Tab label="Lighting" />
+                    <Tab label="Objects" />
+                    <Tab label="Sprites" />
+                    <Tab label="Sync" />
+                  </Tabs>
+                </Box>
 
-            {/* Desktop: All tab panels - same content as mobile */}
-            <Box sx={{ overflow: 'auto', height: 'calc(100% - 49px)' }}>
-              {/* Note: TabPanels are already rendered above in mobile drawer */}
-              {/* They will show/hide based on tabValue for both views */}
+                {/* Desktop: All tab panels - same content as mobile */}
+                <Box sx={{ overflow: 'auto', height: 'calc(100% - 49px)' }}>
+                  {/* Render the same TabPanels for desktop */}
+                  {/* Lighting Tab */}
+                  <TabPanel value={tabValue} index={0}>
+          <Typography variant="h6" gutterBottom>
+            Lighting Controls
+          </Typography>
+
+          {/* Brightness */}
+          <Box sx={{ mb: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+              <BrightnessIcon sx={{ mr: 1 }} />
+              <Typography>Brightness: {lighting.brightness.toFixed(2)}</Typography>
             </Box>
+            <Slider
+              value={lighting.brightness}
+              onChange={(_, value) => handleBrightnessChange(value as number)}
+              min={0}
+              max={2}
+              step={0.1}
+              marks={[
+                { value: 0, label: 'Dark' },
+                { value: 1, label: 'Normal' },
+                { value: 2, label: 'Bright' },
+              ]}
+            />
+          </Box>
+
+          {/* Contrast */}
+          <Box sx={{ mb: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+              <ContrastIcon sx={{ mr: 1 }} />
+              <Typography>Contrast: {lighting.contrast.toFixed(2)}</Typography>
+            </Box>
+            <Slider
+              value={lighting.contrast}
+              onChange={(_, value) => handleContrastChange(value as number)}
+              min={0}
+              max={2}
+              step={0.1}
+              marks={[
+                { value: 0, label: 'Low' },
+                { value: 1, label: 'Normal' },
+                { value: 2, label: 'High' },
+              ]}
+            />
+          </Box>
+
+          {/* Fog of War */}
+          <Box sx={{ mb: 3 }}>
+            <FormControlLabel
+              control={
+                <Switch checked={lighting.fogOfWarEnabled} onChange={handleFogOfWarToggle} />
+              }
+              label="Fog of War"
+            />
+          </Box>
+
+          <Divider sx={{ my: 2 }} />
+
+          {/* Light Sources */}
+          <Typography variant="subtitle1" gutterBottom>
+            Light Sources
+          </Typography>
+          
+          {/* Light Type Selector */}
+          <FormControl fullWidth sx={{ mb: 2 }}>
+            <InputLabel>Light Type</InputLabel>
+            <Select
+              value={selectedLightType}
+              label="Light Type"
+              onChange={(e) => setSelectedLightType(e.target.value as any)}
+            >
+              <MenuItem value="torch">🔥 Torch (100px, warm)</MenuItem>
+              <MenuItem value="lantern">🏮 Lantern (150px, bright)</MenuItem>
+              <MenuItem value="spell">✨ Magical (200px, blue)</MenuItem>
+              <MenuItem value="ambient">💡 Ambient (300px, soft)</MenuItem>
+            </Select>
+          </FormControl>
+          
+          <Button
+            variant={lightPlacementMode ? "contained" : "outlined"}
+            color={lightPlacementMode ? "success" : "primary"}
+            onClick={lightPlacementMode ? () => setLightPlacementMode(false) : handleAddLightSource}
+            fullWidth
+            sx={{ mb: 2 }}
+          >
+            {lightPlacementMode ? '✅ Done Placing Lights' : '💡 Start Placing Lights'}
+          </Button>
+
+          {lighting.lightSources.map((light) => (
+            <Paper key={light.id} sx={{ p: 2, mb: 2, bgcolor: 'action.hover' }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                <Typography variant="body2">{light.type}</Typography>
+                <IconButton size="small" onClick={() => handleRemoveLightSource(light.id)}>
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </Box>
+              <Typography variant="caption">
+                Position: ({light.x}, {light.y}) | Radius: {light.radius}
+              </Typography>
+            </Paper>
+          ))}
+        </TabPanel>
+
+        {/* Objects Tab */}
+        <TabPanel value={tabValue} index={1}>
+          <Typography variant="h6" gutterBottom>
+            Object Management
+          </Typography>
+
+          {/* Category Filter */}
+          <FormControl fullWidth sx={{ mb: 3 }}>
+            <InputLabel>Category</InputLabel>
+            <Select
+              value={selectedCategory}
+              label="Category"
+              onChange={(e) => setSelectedCategory(e.target.value)}
+            >
+              <MenuItem value="all">All</MenuItem>
+              <MenuItem value="monster">Monsters</MenuItem>
+              <MenuItem value="trap">Traps</MenuItem>
+              <MenuItem value="npc">NPCs</MenuItem>
+              <MenuItem value="treasure">Treasure</MenuItem>
+              <MenuItem value="environment">Environment</MenuItem>
+            </Select>
+          </FormControl>
+
+          {/* Quick Actions */}
+          <Typography variant="subtitle2" gutterBottom>
+            Quick Add
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 3 }}>
+            <Button size="small" variant="outlined">
+              Goblin
+            </Button>
+            <Button size="small" variant="outlined">
+              Dragon
+            </Button>
+            <Button size="small" variant="outlined">
+              Trap
+            </Button>
+            <Button size="small" variant="outlined">
+              Chest
+            </Button>
+          </Box>
+
+          <Divider sx={{ my: 2 }} />
+
+          {/* Objects List */}
+          <Typography variant="subtitle2" gutterBottom>
+            Placed Objects ({dmObjects.length})
+          </Typography>
+          {dmObjects
+            .filter((obj) => selectedCategory === 'all' || obj.category === selectedCategory)
+            .map((obj) => (
+              <Paper key={obj.id} sx={{ p: 2, mb: 2, bgcolor: 'action.hover' }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Box>
+                    <Typography variant="body2">{obj.name || obj.category}</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      ({obj.x}, {obj.y})
+                    </Typography>
+                  </Box>
+                  <IconButton
+                    size="small"
+                    onClick={() => handleToggleObjectVisibility(obj.id)}
+                    color={obj.visibleToPlayers ? 'primary' : 'default'}
+                  >
+                    {obj.visibleToPlayers ? <VisibilityIcon /> : <VisibilityOffIcon />}
+                  </IconButton>
+                </Box>
+              </Paper>
+            ))}
+        </TabPanel>
+
+        {/* Sprites Tab */}
+        <TabPanel value={tabValue} index={2}>
+          {palette ? (
+            <PalettePanel
+              palette={palette}
+              selectedSpriteId={selectedSpriteId}
+              onSpriteSelect={handleSpriteSelect}
+              onOpenUploadDialog={() => {}}
+              onCreateCategory={() => {}}
+              onDeleteCategory={() => {}}
+              onMoveSprite={() => {}}
+              onDeleteSprite={() => {}}
+              onRenameSprite={() => {}}
+            />
+          ) : (
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <Typography variant="body2" color="text.secondary">
+                No sprite palette available.
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Start a session from the map builder with a loaded palette.
+              </Typography>
+            </Box>
+          )}
+        </TabPanel>
+
+        {/* Sync Tab */}
+        <TabPanel value={tabValue} index={3}>
+          <Typography variant="h6" gutterBottom>
+            Session Management
+          </Typography>
+
+          {/* Session Info */}
+          <Paper sx={{ p: 2, mb: 3, bgcolor: 'action.hover' }}>
+            <Typography variant="subtitle2">Session ID</Typography>
+            <Typography variant="body2" sx={{ fontFamily: 'monospace', mb: 2 }}>
+              {sessionId}
+            </Typography>
+            
+            <Typography variant="subtitle2" sx={{ mt: 2 }}>Player Link</Typography>
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mt: 1 }}>
+              <TextField
+                size="small"
+                fullWidth
+                value={`${window.location.origin}/player?session=${sessionId}`}
+                InputProps={{
+                  readOnly: true,
+                  sx: { fontFamily: 'monospace', fontSize: '0.875rem' }
+                }}
+              />
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={() => {
+                  navigator.clipboard.writeText(`${window.location.origin}/player?session=${sessionId}`);
+                  // Could add a snackbar notification here
+                }}
+              >
+                Copy
+              </Button>
+            </Box>
+            
+            {lastSaved && (
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
+                Last saved: {lastSaved.toLocaleTimeString()}
+              </Typography>
+            )}
           </Paper>
+
+          {/* Session Name */}
+          <TextField
+            fullWidth
+            label="Session Name"
+            value={sessionName}
+            onChange={(e) => setSessionName(e.target.value)}
+            sx={{ mb: 3 }}
+          />
+
+          {/* Actions */}
+          <Button
+            fullWidth
+            variant="contained"
+            startIcon={<SyncIcon />}
+            onClick={handleSyncNow}
+            sx={{ mb: 2 }}
+          >
+            Sync Now
+          </Button>
+
+          <Button
+            fullWidth
+            variant="outlined"
+            startIcon={<SaveIcon />}
+            onClick={handleSaveSession}
+            sx={{ mb: 2 }}
+          >
+            Save Session
+          </Button>
+
+          <Divider sx={{ my: 3 }} />
+
+          {/* Stats */}
+          <Typography variant="subtitle2" gutterBottom>
+            Session Stats
+          </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Typography variant="body2">
+              Objects: {dmObjects.length}
+            </Typography>
+            <Typography variant="body2">
+              Visible Objects: {dmObjects.filter((o) => o.visibleToPlayers).length}
+            </Typography>
+            <Typography variant="body2">
+              Light Sources: {lighting.lightSources.length}
+            </Typography>
+            <Typography variant="body2">
+              Fog of War: {lighting.fogOfWarEnabled ? 'Enabled' : 'Disabled'}
+            </Typography>
+          </Box>
+
+          {!connected && (
+            <Alert severity="warning" sx={{ mt: 3 }}>
+              Not connected to session. Changes will not be synchronized.
+            </Alert>
+          )}
+        </TabPanel>
+                </Box>
+              </Paper>
+            )}
+            
+            {/* Desktop drawer toggle button */}
+            <IconButton
+              onClick={() => setDesktopDrawerOpen(!desktopDrawerOpen)}
+              sx={{
+                position: 'fixed',
+                right: desktopDrawerOpen ? 400 : 0,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                zIndex: 1100,
+                backgroundColor: 'primary.main',
+                color: 'white',
+                borderRadius: desktopDrawerOpen ? '8px 0 0 8px' : '0 8px 8px 0',
+                padding: '12px 8px',
+                transition: 'right 0.3s ease',
+                '&:hover': {
+                  backgroundColor: 'primary.dark',
+                },
+                boxShadow: 2,
+              }}
+              aria-label={desktopDrawerOpen ? 'Close controls' : 'Open controls'}
+            >
+              {desktopDrawerOpen ? <ChevronRightIcon /> : <ChevronLeftIcon />}
+            </IconButton>
+          </>
         )}
       </Box>
     </Box>
