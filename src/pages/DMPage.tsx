@@ -478,7 +478,7 @@ export const DMPage: React.FC = () => {
           sx={{ 
             flex: 1, 
             position: 'relative', 
-            overflow: 'auto', // Changed from hidden to auto for scrolling if needed
+            overflow: 'hidden', // No scrollbar - use pan to navigate
           }}
         >
           {/* Canvas wrapper for click handling and light positioning */}
@@ -539,25 +539,38 @@ export const DMPage: React.FC = () => {
               />
             )}
             
-            {/* Light source indicators on DM map */}
-            {lighting.lightSources.map((light) => (
-              <Box
-                key={`indicator-${light.id}`}
-                sx={{
-                  position: 'absolute',
-                  left: `${light.x}px`,
-                  top: `${light.y}px`,
-                  width: `${light.radius * 2}px`,
-                  height: `${light.radius * 2}px`,
-                  transform: 'translate(-50%, -50%)',
-                  borderRadius: '50%',
-                  border: `2px dashed ${light.color || '#FFA500'}`,
-                  backgroundColor: `${light.color || '#FFA500'}22`,
-                  pointerEvents: 'none',
-                  zIndex: 50,
-                }}
-              />
-            ))}
+            {/* Light source indicators on DM map - wrapped in transform container */}
+            <Box
+              sx={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: 0,
+                height: 0,
+                pointerEvents: 'none',
+                transform: `translate(${dmPanX}px, ${dmPanY}px) scale(${dmZoom})`,
+                transformOrigin: 'top left',
+              }}
+            >
+              {lighting.lightSources.map((light) => (
+                <Box
+                  key={`indicator-${light.id}`}
+                  sx={{
+                    position: 'absolute',
+                    left: `${light.x}px`,
+                    top: `${light.y}px`,
+                    width: `${light.radius * 2}px`,
+                    height: `${light.radius * 2}px`,
+                    transform: 'translate(-50%, -50%)',
+                    borderRadius: '50%',
+                    border: `2px dashed ${light.color || '#FFA500'}`,
+                    backgroundColor: `${light.color || '#FFA500'}22`,
+                    pointerEvents: 'none',
+                    zIndex: 50,
+                  }}
+                />
+              ))}
+            </Box>
           </Box>
           
           {/* Connection status */}

@@ -376,7 +376,7 @@ export const PlayerPage: React.FC<PlayerPageProps> = ({ sessionId: propSessionId
             panY={panY}
           />
           
-          {/* Fog of War Canvas Overlay */}
+          {/* Fog of War Canvas Overlay - Must match MapCanvas transform */}
           {lighting.fogOfWarEnabled && (
             <>
               <canvas
@@ -387,31 +387,44 @@ export const PlayerPage: React.FC<PlayerPageProps> = ({ sessionId: propSessionId
                   left: 0,
                   pointerEvents: 'none',
                   zIndex: 100,
+                  transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
+                  transformOrigin: 'top left',
                 }}
               />
               
-              {/* Colored glow layer for atmosphere */}
-              {lighting.lightSources.map((light) => (
-                <Box
-                  key={`glow-${light.id}`}
-                  sx={{
-                    position: 'absolute',
-                    left: `${light.x}px`,
-                    top: `${light.y}px`,
-                    width: `${light.radius * 2.2}px`,
-                    height: `${light.radius * 2.2}px`,
-                    transform: 'translate(-50%, -50%)',
-                    borderRadius: '50%',
-                    background: `radial-gradient(circle, 
-                      ${light.color || '#FFA500'}44 0%, 
-                      ${light.color || '#FFA500'}22 40%,
-                      transparent 70%)`,
-                    pointerEvents: 'none',
-                    filter: `blur(${light.radius * 0.2}px)`,
-                    zIndex: 101,
-                  }}
-                />
-              ))}
+              {/* Colored glow layer for atmosphere - Must match MapCanvas transform */}
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                pointerEvents: 'none',
+                transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
+                transformOrigin: 'top left',
+                zIndex: 101,
+              }}>
+                {lighting.lightSources.map((light) => (
+                  <Box
+                    key={`glow-${light.id}`}
+                    sx={{
+                      position: 'absolute',
+                      left: `${light.x}px`,
+                      top: `${light.y}px`,
+                      width: `${light.radius * 2.2}px`,
+                      height: `${light.radius * 2.2}px`,
+                      transform: 'translate(-50%, -50%)',
+                      borderRadius: '50%',
+                      background: `radial-gradient(circle, 
+                        ${light.color || '#FFA500'}44 0%, 
+                        ${light.color || '#FFA500'}22 40%,
+                        transparent 70%)`,
+                      pointerEvents: 'none',
+                      filter: `blur(${light.radius * 0.2}px)`,
+                    }}
+                  />
+                ))}
+              </div>
             </>
           )}
         </Box>
